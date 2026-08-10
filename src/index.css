@@ -1,0 +1,1116 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------ */
+/* StratFolio design tokens — dark liquid glass                        */
+/*                                                                     */
+/* Charcoal-to-graphite foundation with a distinctly *blue* liquid      */
+/* glass language. Calm, premium, trustworthy — deliberately not neon   */
+/* cyberpunk, not purple-heavy, not frosted-white.                      */
+/*                                                                     */
+/* Two rules govern this file:                                          */
+/*  1. Glass is the shared substrate. Every surface is the same smoked  */
+/*     panel over the same graphite ground.                            */
+/*  2. Green and red are reserved strictly for gains and losses.        */
+/*     Blue carries brand, chrome and AI intelligence.                  */
+/* ------------------------------------------------------------------ */
+@theme {
+  /* Base is a notch lighter than the mockup's #0D1117, with the slate
+     surfaces lifted proportionally so the contrast relationships hold. */
+  --color-canvas: #12171f;
+  --color-canvas-deep: #0e131a;
+  --color-surface: #19202b;
+  --color-surface-raised: #212b3a;
+  --color-surface-sunken: #161c25;
+
+  --color-ink: #f4f7fb;
+  --color-ink-soft: #b4c0cf;
+  --color-ink-muted: #8d99a8;
+
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-strong: rgba(255, 255, 255, 0.16);
+
+  --color-brand-50: rgba(47, 123, 255, 0.1);
+  --color-brand-100: rgba(47, 123, 255, 0.16);
+  --color-brand-200: rgba(47, 123, 255, 0.26);
+  --color-brand-300: #5ba6ff;
+  --color-brand-400: #4a91ff;
+  --color-brand-500: #2f7bff;
+  --color-brand-600: #2f7bff;
+  --color-brand-700: #5ba6ff;
+
+  --color-up: #34d399;
+  --color-up-soft: rgba(52, 211, 153, 0.14);
+  --color-down: #f87171;
+  --color-down-soft: rgba(248, 113, 113, 0.14);
+
+  /* AI accent stays blue-dominant — the spec warns off purple-heavy
+     gradients, so this runs cobalt into a light azure with only a hint of
+     indigo at the far end. */
+  --color-ai-from: #2f7bff;
+  --color-ai-mid: #4a91ff;
+  --color-ai-to: #6d9dff;
+  --color-ai-soft: rgba(47, 123, 255, 0.14);
+
+  --font-sans:
+    'Inter var', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  /* 18–24px radii per the spec — present, not bubbly. */
+  --radius-card: 20px;
+  --radius-tile: 18px;
+  --radius-inner: 14px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lift: 0 18px 40px -24px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- Glass material variables (single point of adjustment) ---- */
+:root {
+  color-scheme: dark;
+
+  /* Smoked panel: a light film over graphite, not a white frosted card. */
+  --glass-fill: rgba(255, 255, 255, 0.045);
+  --glass-fill-raised: rgba(255, 255, 255, 0.07);
+  --glass-fill-solid: #1a2130;
+  --glass-blur: 16px;
+  --glass-blur-strong: 26px;
+  --glass-saturate: 125%;
+
+  --glass-edge: rgba(255, 255, 255, 0.09);
+  --glass-edge-strong: rgba(255, 255, 255, 0.14);
+  --glass-highlight: rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 18px 40px -26px rgba(0, 0, 0, 0.85);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    background-color: var(--color-canvas);
+    /* Faint blue refraction pooling behind the glass — restrained, no glow. */
+    background-image:
+      radial-gradient(60rem 40rem at 88% -8%, rgba(47, 123, 255, 0.16), transparent 62%),
+      radial-gradient(46rem 32rem at 4% 4%, rgba(47, 123, 255, 0.08), transparent 60%),
+      radial-gradient(56rem 38rem at 72% 104%, rgba(91, 166, 255, 0.08), transparent 64%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  body {
+    margin: 0;
+    background-color: transparent;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  #root {
+    min-height: 100svh;
+    position: relative;
+  }
+
+  * {
+    border-color: var(--color-line);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  ::selection {
+    background: rgba(47, 123, 255, 0.35);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Glass surfaces                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Standard smoked panel. */
+@utility glass {
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    var(--glass-shadow);
+}
+
+/** Heavier panel — modals, sheets, anything floating above content. */
+@utility glass-strong {
+  background-color: rgba(22, 29, 41, 0.88);
+  background-image:
+    radial-gradient(80% 90% at 100% 0%, rgba(47, 123, 255, 0.13), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-edge-strong);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.025),
+    0 34px 84px -30px rgba(0, 0, 0, 0.96),
+    0 12px 34px -22px rgba(47, 123, 255, 0.34);
+}
+
+/**
+ * Blur-free panel for elements repeated many times inside a scrolling
+ * carousel. A backdrop-filter per tile is the single most expensive thing in
+ * this UI; over the graphite ground an opaque slate reads identically.
+ */
+@utility glass-flat {
+  background-color: rgba(27, 35, 49, 0.92);
+  background-image:
+    radial-gradient(90% 82% at 100% 0%, rgba(47, 123, 255, 0.09), transparent 66%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 46%);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+    var(--glass-shadow);
+}
+
+/** Navigation chrome — rail, header, tab bar. */
+@utility glass-nav {
+  background-color: rgba(18, 23, 31, 0.72);
+  -webkit-backdrop-filter: blur(22px) saturate(125%);
+  backdrop-filter: blur(22px) saturate(125%);
+}
+
+/** Floating chrome — dropdown menus, sheet headers, the mobile "More" panel. */
+@utility glass-chrome {
+  background-color: rgba(24, 31, 44, 0.92);
+  background-image:
+    radial-gradient(80% 110% at 100% 0%, rgba(47, 123, 255, 0.12), transparent 68%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 48%);
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+  backdrop-filter: blur(24px) saturate(125%);
+}
+
+/** Ambient news bubble — transparent enough to feel attached to mobile nav. */
+@utility glass-toast {
+  background-color: rgba(226, 237, 252, 0.13);
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 20px 44px -20px rgba(0, 0, 0, 0.8);
+}
+
+@media (max-width: 63.999rem) {
+  :root {
+    /* Small type needs more contrast on compact glass surfaces. Keep a
+       visible hierarchy without letting secondary copy sink into the tiles. */
+    --color-ink-soft: #e4eaf2;
+    --color-ink-muted: #c5cfdb;
+  }
+
+  /* Several dense mobile tiles use explicit white opacity utilities instead
+     of the ink tokens. Lift those to a consistent, readable body-text white. */
+  #root [class*='text-white/'] {
+    color: rgba(244, 247, 251, 0.94);
+  }
+
+  /* Trade-thesis tiles are especially information-dense; all neutral copy in
+     them should read as primary white, while gain/loss and AI colors remain. */
+  .trade-thesis-tile .text-ink-soft,
+  .trade-thesis-tile .text-ink-muted,
+  .trade-thesis-tile [class*='text-white/'] {
+    color: #f4f7fb;
+  }
+
+  .ai-plan-paused {
+    opacity: 0.78;
+  }
+
+  .mobile-logo-text {
+    background: none;
+    color: #cbd3de;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    -webkit-text-fill-color: currentColor;
+  }
+
+  .mobile-logo-text svg {
+    color: #cbd3de;
+    -webkit-text-fill-color: initial;
+  }
+
+  h2.mobile-logo-text svg {
+    color: rgba(91, 166, 255, 0.8);
+  }
+
+  .section-gloss-text {
+    color: transparent;
+    background: linear-gradient(100deg, #7546c7 0%, #51279b 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: none;
+    animation: none;
+  }
+
+  .mobile-news-toast {
+    background-color: rgba(38, 49, 65, 0.68);
+    border-color: rgba(255, 255, 255, 0.11);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+}
+
+/* Without backdrop-filter the panels go solid rather than transparent. */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .glass,
+  .card {
+    background-color: var(--glass-fill-solid);
+  }
+  .glass-strong,
+  .glass-chrome {
+    background-color: #1c2432;
+  }
+  .glass-nav {
+    background-color: #12171f;
+  }
+}
+
+/** The app-wide panel: one class, so the material is adjustable in one place. */
+@utility card {
+  background-color: rgba(25, 33, 46, 0.72);
+  background-image:
+    radial-gradient(86% 88% at 100% 0%, rgba(47, 123, 255, 0.085), transparent 64%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 46%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-card);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.018),
+    var(--glass-shadow);
+}
+
+/** Smoked inset used inside cards for charts, notes, order summaries and facts. */
+@utility liquid-inset {
+  background-color: rgba(8, 14, 24, 0.28);
+  background-image:
+    radial-gradient(85% 120% at 100% 0%, rgba(47, 123, 255, 0.08), transparent 68%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 54%);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    inset 0 -12px 28px -24px rgba(47, 123, 255, 0.3);
+}
+
+/** Tactile input/control substrate shared by sheets and dialogs. */
+@utility liquid-control {
+  background-color: rgba(8, 14, 24, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.105);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 8px 24px -20px rgba(0, 0, 0, 0.9);
+  transition-property: border-color, background-color, box-shadow;
+  transition-duration: 160ms;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.045);
+    border-color: rgba(91, 166, 255, 0.24);
+  }
+
+  &:focus,
+  &:focus-within {
+    border-color: rgba(91, 166, 255, 0.46);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 0 0 3px rgba(47, 123, 255, 0.1);
+  }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.01em;
+}
+
+/* ---- AI intelligence treatment ---- */
+@utility ai-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-ai-from) 0%,
+    var(--color-ai-mid) 55%,
+    var(--color-ai-to) 100%
+  );
+}
+
+.ai-score-neon-purple {
+  /* The ring reads as the ground, not as a light outline, so the violet
+     meets its container with no pale seam between them. */
+  border: 1px solid var(--color-canvas);
+  background:
+    radial-gradient(78% 120% at 24% 0%, rgba(125, 190, 255, 0.3), transparent 67%),
+    radial-gradient(78% 130% at 80% 100%, rgba(218, 104, 255, 0.4), transparent 70%),
+    linear-gradient(105deg, rgba(33, 16, 66, 0.98), rgba(78, 25, 121, 0.98) 54%, rgba(36, 38, 91, 0.98));
+  /* The glow is kept tight to the pill — a wide halo reads as a white
+     background smear against the dark ground. */
+  box-shadow:
+    inset 0 0 8px rgba(205, 130, 255, 0.13),
+    0 0 5px -3px rgba(195, 100, 255, 0.5),
+    0 0 10px -8px rgba(112, 151, 255, 0.5),
+    0 5px 14px -9px rgba(0, 0, 0, 0.9);
+}
+
+@utility ai-text {
+  background-image: linear-gradient(100deg, #5ba6ff 0%, #2f7bff 100%);
+  background-clip: text;
+  color: transparent;
+}
+
+@utility ai-tint {
+  background-image: linear-gradient(
+    135deg,
+    rgba(47, 123, 255, 0.12) 0%,
+    rgba(91, 166, 255, 0.06) 100%
+  );
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility nav-gloss-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background-color: transparent;
+  color: var(--color-ink-soft);
+  transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms,
+    box-shadow 150ms;
+
+  &:hover {
+    color: var(--color-ink);
+  }
+
+  &:active {
+    transform: translateY(1px) scale(0.95);
+  }
+}
+
+.system-data-table th + th,
+.system-data-table td + td {
+  padding-left: 10px;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.12));
+  background-position: 5px 0;
+  background-repeat: no-repeat;
+  background-size: 0.5px 100%;
+}
+
+@keyframes sf-flash-up {
+  0% {
+    background-color: rgba(52, 211, 153, 0.2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes sf-flash-down {
+  0% {
+    background-color: rgba(248, 113, 113, 0.2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes sf-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.flash-up {
+  animation: sf-flash-up 700ms ease-out;
+  border-radius: 8px;
+}
+
+.flash-down {
+  animation: sf-flash-down 700ms ease-out;
+  border-radius: 8px;
+}
+
+/* Subtle "there is an AI idea here" pulse. Restrained: one soft halo
+   breathing at 2.6s, not a flashing beacon. */
+@keyframes sf-ai-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(47, 123, 255, 0.4),
+      0 4px 12px -6px rgba(47, 123, 255, 0.7);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(47, 123, 255, 0),
+      0 4px 14px -5px rgba(47, 123, 255, 0.85);
+  }
+}
+
+.ai-pulse {
+  animation: sf-ai-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes sf-ai-sheen {
+  0% {
+    transform: translateX(-130%);
+  }
+  55%,
+  100% {
+    transform: translateX(130%);
+  }
+}
+
+.ai-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.32) 50%,
+    transparent 80%
+  );
+  animation: sf-ai-sheen 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+
+}
+@keyframes ai-trading-bubble-life {
+  0% { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  8%, 82% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-2px) scale(0.99); }
+}
+
+.ai-trading-bubble {
+  transform-origin: top right;
+  animation: ai-trading-bubble-life 3s ease forwards;
+}
+
+@keyframes plan-stopwatch-spin {
+  to { transform: rotate(360deg); }
+}
+
+.plan-stopwatch-hand {
+  animation: plan-stopwatch-spin 1.8s linear infinite;
+}
+
+@keyframes positions-trend-travel {
+  from { stroke-dashoffset: 18; opacity: 0.15; }
+  45%, 75% { opacity: 1; }
+  to { stroke-dashoffset: 0; opacity: 0.2; }
+}
+
+@keyframes positions-trend-tip-glow {
+  0%, 55%, 100% { opacity: 0.25; filter: drop-shadow(0 0 0 transparent); }
+  72% { opacity: 1; filter: drop-shadow(0 0 2px currentColor); }
+}
+
+.positions-trend-highlight {
+  stroke-dasharray: 4 18;
+  animation: positions-trend-travel 2.2s ease-in-out infinite;
+}
+
+.positions-trend-tip {
+  animation: positions-trend-tip-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes thesis-sparkle-travel {
+  from { stroke-dashoffset: 34; opacity: 0.12; }
+  42%, 76% { opacity: 1; }
+  to { stroke-dashoffset: 0; opacity: 0.18; }
+}
+
+@keyframes thesis-sparkle-glint {
+  0%, 58%, 100% { opacity: 0.2; filter: drop-shadow(0 0 0 transparent); }
+  74% { opacity: 1; filter: drop-shadow(0 0 2.5px currentColor); }
+}
+
+.thesis-sparkle-trace {
+  stroke-dasharray: 5 34;
+  animation: thesis-sparkle-travel 2.4s ease-in-out infinite;
+}
+
+.thesis-sparkle-glint {
+  animation: thesis-sparkle-glint 2.4s ease-in-out infinite;
+}
+
+@keyframes plan-disable-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.plan-disable-fill {
+  animation: plan-disable-fill 700ms linear forwards;
+}
+
+@keyframes plans-execution-marquee {
+  0% { transform: translateX(0); }
+  88.24%, 100% { transform: translateX(-50%); }
+}
+
+.plans-execution-track {
+  animation: plans-execution-marquee 34s linear infinite;
+}
+
+@keyframes section-gloss-sheen {
+  from { background-position: 180% 50%; }
+  to { background-position: -80% 50%; }
+}
+
+.section-gloss-text {
+  color: #aeb8c5;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  filter: none;
+  animation: none;
+}
+
+@keyframes mobile-market-ticker-scroll {
+  0% { transform: translateX(0); }
+  96%, 100% { transform: translateX(-50%); }
+}
+
+.mobile-market-ticker-track {
+  animation: mobile-market-ticker-scroll 25s linear infinite;
+}
+
+@keyframes ticker-price-pulse-up {
+  0% { color: #f7fbff; text-shadow: none; transform: scale(1); }
+  12%, 42% { color: #72ffc5; text-shadow: 0 0 7px rgba(59, 255, 170, 0.95); transform: scale(1.08); }
+  100% { color: #f7fbff; text-shadow: none; transform: scale(1); }
+}
+
+@keyframes ticker-price-pulse-down {
+  0% { color: #f7fbff; text-shadow: none; transform: scale(1); }
+  12%, 42% { color: #78c8ff; text-shadow: 0 0 7px rgba(67, 169, 255, 0.95); transform: scale(1.08); }
+  100% { color: #f7fbff; text-shadow: none; transform: scale(1); }
+}
+
+.ticker-price-pulse-up {
+  animation: ticker-price-pulse-up 1200ms ease-out forwards;
+}
+
+.ticker-price-pulse-down {
+  animation: ticker-price-pulse-down 1200ms ease-out forwards;
+}
+
+@keyframes thesis-research-marquee {
+  0% { transform: translateX(0); }
+  72.73%, 100% { transform: translateX(-50%); }
+}
+
+.thesis-research-track {
+  animation: thesis-research-marquee 22s linear infinite;
+}
+
+/**
+ * The ask prompt runs longer than the field, so it scrolls instead of
+ * truncating. The track carries two identical copies, each with its own
+ * trailing gap, so -50% lands the second exactly where the first began.
+ * Holds at each end to stay readable rather than sliding continuously.
+ */
+@keyframes thesis-ask-marquee {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+  86%,
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.thesis-ask-track {
+  animation: thesis-ask-marquee 13s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thesis-research-track,
+  .thesis-ask-track,
+  .plans-execution-track,
+  .plan-stopwatch-hand,
+  .positions-trend-highlight,
+  .positions-trend-tip,
+  .thesis-sparkle-trace,
+  .thesis-sparkle-glint,
+  .plan-disable-fill,
+  .section-gloss-text { animation: none; }
+  .mobile-market-ticker-track { animation: none; }
+  .ticker-price-pulse-up,
+  .ticker-price-pulse-down { animation: none; }
+}
+
+@keyframes ai-criterion-rainbow-shift {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+
+.ai-criterion-rainbow {
+  color: #09131c;
+  background: linear-gradient(105deg, #55d6a8, #579fd6, #9478ca, #d960ad, #d5ac5e, #55d6a8);
+  background-size: 220% 100%;
+  box-shadow: 0 0 7px -4px rgba(120, 190, 255, 0.46), inset 0 1px rgba(255, 255, 255, 0.28);
+  filter: brightness(0.88) saturate(0.9);
+  animation: ai-criterion-rainbow-shift 3.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-criterion-rainbow { animation: none; }
+}
+
+/**
+ * The one modal panel material, shared by every dialog in the app. Near-opaque
+ * so form fields and order data stay legible over any page behind it.
+ */
+.modal-surface {
+  background-color: rgba(27, 35, 49, 0.97);
+  background-image:
+    radial-gradient(90% 82% at 100% 0%, rgba(47, 123, 255, 0.07), transparent 66%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 46%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+    0 28px 70px -30px rgba(0, 0, 0, 0.96);
+}
+
+/**
+ * The one menu panel material — dropdowns, selects and popovers. Shares the
+ * modal's slate so a menu opened over a dialog reads as the same system.
+ */
+.menu-surface {
+  background-color: rgba(27, 35, 49, 0.97);
+  background-image:
+    radial-gradient(90% 82% at 100% 0%, rgba(47, 123, 255, 0.07), transparent 66%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 46%);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 15px;
+  padding: 0.375rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 44px -18px rgba(0, 0, 0, 0.9);
+}
+
+/** Glossy black chrome closing a tile at the bottom. */
+.tile-footer-gloss {
+  position: relative;
+  background-color: rgba(6, 10, 16, 0.55);
+  background-image: linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.055),
+    rgba(255, 255, 255, 0.015) 46%,
+    rgba(0, 0, 0, 0.16)
+  );
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.tile-footer-gloss::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: 30px;
+  background: linear-gradient(
+    0deg,
+    rgba(4, 8, 14, 0.4),
+    rgba(4, 8, 14, 0.24) 22%,
+    rgba(4, 8, 14, 0.11) 48%,
+    rgba(4, 8, 14, 0.035) 74%,
+    rgba(4, 8, 14, 0)
+  );
+  pointer-events: none;
+}
+
+
+/**
+ * Quantity slider. The filled portion is driven by `--range-fill` so the
+ * track colour and the value can never disagree.
+ */
+.range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.range-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    var(--color-brand-500) var(--range-fill, 0%),
+    rgba(255, 255, 255, 0.09) var(--range-fill, 0%)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  margin-top: -6px;
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: #eaf1ff;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 3px 9px -3px rgba(0, 0, 0, 0.9);
+}
+
+.range-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.range-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-brand-500);
+}
+
+.range-slider::-moz-range-thumb {
+  height: 17px;
+  width: 17px;
+  border-radius: 9999px;
+  background: #eaf1ff;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+}
+
+.range-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(47, 123, 255, 0.25);
+}
+
+/**
+ * A highlight running along the studies icon's own outline. `pathLength={100}`
+ * normalises each path so one dash figure works for both the gear and the cap
+ * despite their very different perimeters.
+ *
+ * The sweep takes a second and then rests for three, so the icon draws the eye
+ * on arrival without becoming a permanently spinning distraction.
+ */
+.study-trace {
+  stroke-dasharray: 16 84;
+  animation: study-trace-sweep 4s linear infinite;
+}
+
+@keyframes study-trace-sweep {
+  0% {
+    stroke-dashoffset: 100;
+    opacity: 1;
+  }
+  25% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  /* Dark for the rest of the cycle: a highlight parked at the finish line
+     reads as a rendering artefact rather than a rest. */
+  32% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .study-trace {
+    animation: none;
+    stroke-dasharray: none;
+    opacity: 0.45;
+  }
+}
+
+/** Unread reply marker: a soft pulse rather than a hard blink. */
+.notify-ear {
+  box-shadow:
+    0 0 0 1.5px rgba(9, 13, 20, 0.9),
+    0 0 6px 1px rgba(255, 77, 94, 0.85);
+  animation: notify-ear-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes notify-ear-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.62;
+    transform: scale(0.86);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notify-ear {
+    animation: none;
+  }
+}
+
+/** One row treatment for every popup menu, so all menus feel identical. */
+.menu-item {
+  display: flex;
+  width: 100%;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 11px;
+  padding: 0.5rem 0.625rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-soft);
+  outline: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.menu-item:hover,
+.menu-item[data-highlighted] {
+  background-color: rgba(255, 255, 255, 0.07);
+  color: var(--color-ink);
+}
+
+/** The active choice in a single-select menu. */
+.menu-item[data-active='true'] {
+  background-color: rgba(47, 123, 255, 0.14);
+  color: var(--color-brand-300);
+}
+
+.menu-item[data-disabled] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.modal-surface .liquid-control {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.plan-action-button {
+  transition: transform 150ms ease, background-color 150ms ease, border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.plan-action-button:active {
+  transform: translateY(1px) scale(0.95);
+  box-shadow: 0 2px 8px -6px rgba(91, 166, 255, 0.75);
+}
+
+@keyframes ai-plan-cross-out {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 0.9; }
+}
+
+.ai-plan-paused {
+  opacity: 0.52;
+}
+
+.ai-plan-paused::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - 2px);
+  right: 0;
+  left: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 120, 150, 0.45), rgba(255, 210, 220, 0.9));
+  transform-origin: left center;
+  animation: ai-plan-cross-out 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/**
+ * "Plan it" affordance: the bottom rule of the notepad writes itself, holds, then
+ * clears. Reads as a note being taken rather than a spinner, so it suggests an
+ * action still to be captured instead of work already in flight.
+ * Dash length exceeds the 6.4-unit rule so the offset fully hides it.
+ */
+.plan-note-line {
+  stroke-dasharray: 7;
+  stroke-dashoffset: 7;
+  animation: plan-note-write 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes plan-note-write {
+  0% {
+    stroke-dashoffset: 7;
+  }
+  32% {
+    stroke-dashoffset: 0;
+  }
+  74% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-note-line {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+
+/**
+ * Thesis card crest: a static gradient rule with two bright points that run in
+ * from the corners, meet in the middle, and fade — so the eye lands on the
+ * card's centre where the contract sits.
+ */
+.thesis-edge-seam {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(47, 123, 255, 0.55) 22%,
+    rgba(109, 157, 255, 0.75) 50%,
+    rgba(47, 123, 255, 0.55) 78%,
+    transparent
+  );
+  overflow: hidden;
+}
+
+.thesis-edge-spark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 34%;
+  pointer-events: none;
+  animation: thesis-edge-converge 3.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.thesis-edge-spark-left {
+  left: 0;
+  background: linear-gradient(90deg, transparent, rgba(214, 233, 255, 0.95));
+}
+
+.thesis-edge-spark-right {
+  right: 0;
+  background: linear-gradient(270deg, transparent, rgba(214, 233, 255, 0.95));
+  animation-name: thesis-edge-converge-right;
+}
+
+@keyframes thesis-edge-converge {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    transform: translateX(196%);
+    opacity: 0;
+  }
+}
+
+@keyframes thesis-edge-converge-right {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    transform: translateX(-196%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thesis-edge-spark {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+
+/**
+ * Hold-to-confirm fill: sweeps left to right over the hold duration so the
+ * remaining time is legible at a glance. Sits under the label, never over it.
+ */
+.hold-confirm-fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+.hold-confirm-fill-active {
+  transform: scaleX(1);
+  transition: transform 750ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The hold still takes the same time; only the sweep is replaced by a
+     steady wash, so the control never appears frozen. */
+  .hold-confirm-fill-active {
+    transform: scaleX(1);
+    transition: none;
+    background: rgba(255, 255, 255, 0.18);
+  }
+}
+
+
+/**
+ * Live quote beside the order chart. Mirrors the market ticker's pulse, but
+ * red on a downtick — that strip codes direction blue, whereas a price the
+ * user is about to trade against should read in gain/loss terms.
+ */
+@keyframes price-tick-up {
+  0% { color: #f7fbff; text-shadow: none; }
+  12%, 42% { color: #72ffc5; text-shadow: 0 0 8px rgba(59, 255, 170, 0.9); }
+  100% { color: #f7fbff; text-shadow: none; }
+}
+
+@keyframes price-tick-down {
+  0% { color: #f7fbff; text-shadow: none; }
+  12%, 42% { color: #ff8fa3; text-shadow: 0 0 8px rgba(255, 110, 135, 0.9); }
+  100% { color: #f7fbff; text-shadow: none; }
+}
+
+.price-tick-up { animation: price-tick-up 900ms ease-out; }
+.price-tick-down { animation: price-tick-down 900ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .price-tick-up,
+  .price-tick-down { animation: none; }
+}
