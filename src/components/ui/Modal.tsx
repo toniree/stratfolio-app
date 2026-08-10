@@ -21,6 +21,7 @@ interface ModalProps {
   /** Widens the panel for form-heavy tickets; the treatment is unchanged. */
   size?: 'default' | 'wide'
   className?: string
+  showCloseButton?: boolean
 }
 
 /**
@@ -39,6 +40,7 @@ export function Modal({
   footer,
   size = 'default',
   className,
+  showCloseButton = true,
 }: ModalProps) {
   const pushOverlay = useUiStore((s) => s.pushOverlay)
   const popOverlay = useUiStore((s) => s.popOverlay)
@@ -91,17 +93,19 @@ export function Modal({
                 </Dialog.Description>
               ) : null}
             </div>
-            <Dialog.Close
-              aria-label="Close"
-              className={cn(
-                'liquid-control grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted transition-[background-color,color,transform] hover:text-ink active:scale-95',
-                // Lifted out of flow so a centred title centres on the panel,
-                // not on the space left over beside the button.
-                align === 'center' ? 'absolute top-4 right-4 sm:right-5' : '-mr-1 -mt-1',
-              )}
-            >
-              <X size={18} />
-            </Dialog.Close>
+            {showCloseButton ? (
+              <Dialog.Close
+                aria-label="Close"
+                className={cn(
+                  'liquid-control grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted transition-[background-color,color,transform] hover:text-ink active:scale-95',
+                  // Lifted out of flow so a centred title centres on the panel,
+                  // not on the space left over beside the button.
+                  align === 'center' ? 'absolute top-4 right-4 sm:right-5' : '-mr-1 -mt-1',
+                )}
+              >
+                <X size={18} />
+              </Dialog.Close>
+            ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3.5 sm:px-5 sm:py-4">

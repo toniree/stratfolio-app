@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ideasApi, newsApi, plannerApi, portfolioApi } from '@/api'
 import type { OrderRequest, PerformancePeriod } from '@/api/types'
 import type { CreatePlannerIdeaInput, PlannerIdea, UpdatePlannerIdeaInput } from '@/api/newsTypes'
-import { formatMoney, formatQty } from '@/lib/format'
 import { useOrderToastStore } from '@/store/orderToastStore'
 
 export const queryKeys = {
@@ -80,15 +79,9 @@ export function useSubmitOrder() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (request: OrderRequest) => portfolioApi.submitOrder(request),
-    // Acknowledgements fire from the hook rather than each call site, so every
-    // path that changes the book confirms itself the same way.
-    onSuccess: (order) => {
-      useOrderToastStore.getState().notify({
-        kind: order.status === 'FILLED' ? 'Filled' : 'Order sent',
-        title: `${order.side} ${formatQty(order.quantity)} ${order.symbol}`,
-        detail: `${order.company} · ${formatMoney(order.estimatedValue)}`,
-        tone: order.side === 'SELL' ? 'down' : 'up',
-      })
+    // User-submitted orders confirm inside the ticket. Header acknowledgements
+    // are reserved for orders initiated by automation or AI.
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.activity })
     },
   })

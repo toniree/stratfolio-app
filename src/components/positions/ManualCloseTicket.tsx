@@ -1,6 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, Info, SendHorizontal } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { Info, SendHorizontal } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatQty, formatSignedMoney } from '@/lib/format'
 import type { Order, Position } from '@/api/types'
@@ -10,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { HoldToConfirmButton } from '@/components/ui/HoldToConfirmButton'
 import { Modal } from '@/components/ui/Modal'
 import { PositionContextPanel } from '@/components/positions/PositionContextPanel'
+import { OrderRoutingAnimation } from '@/components/trade/OrderRoutingAnimation'
 
 type OrderType = 'MARKET' | 'LIMIT'
 
@@ -62,6 +62,12 @@ export function ManualCloseTicket({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!submittedOrder) return
+    const timeout = window.setTimeout(() => onOpenChange(false), 2500)
+    return () => window.clearTimeout(timeout)
+  }, [submittedOrder, onOpenChange])
+
   const quantity = useMemo(() => {
     const parsed = Number(quantityText)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
@@ -97,7 +103,7 @@ export function ManualCloseTicket({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      className="sm:w-[min(500px,calc(100vw-2rem))]"
+      showCloseButton={!submittedOrder}
       title={
         submittedOrder ? (
           'Close order sent'
@@ -114,16 +120,12 @@ export function ManualCloseTicket({
       description={
         submittedOrder ? 'Your broker has received the simulated order.' : undefined
       }
+      className={cn(
+        'sm:w-[min(500px,calc(100vw-2rem))]',
+        submittedOrder && 'order-confirmation',
+      )}
       footer={
-        submittedOrder ? (
-          <Button
-            variant="secondary"
-            className="plan-action-button h-11 w-full rounded-[14px]"
-            onClick={() => onOpenChange(false)}
-          >
-            Done
-          </Button>
-        ) : (
+        submittedOrder ? undefined : (
           <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
@@ -332,14 +334,7 @@ function CloseRow({
 function CloseOrderSent({ order, unit }: { order: Order; unit: string }) {
   return (
     <div className="py-2 text-center">
-      <motion.div
-        initial={{ scale: 0.65, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 20 }}
-        className="liquid-inset mx-auto grid h-16 w-16 place-items-center rounded-full border-up/25 bg-up-soft shadow-[0_12px_34px_-18px_rgba(52,211,153,0.7)]"
-      >
-        <CheckCircle2 size={34} className="text-up" strokeWidth={2.2} />
-      </motion.div>
+      <OrderRoutingAnimation brokerageId={order.brokerageId} />
       <h3 className="mt-4 text-[18px] font-extrabold tracking-[-0.02em] text-ink">
         Sent to your broker
       </h3>

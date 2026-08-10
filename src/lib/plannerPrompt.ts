@@ -10,7 +10,7 @@ export function plannerInputFromPrompt(prompt: string): CreatePlannerIdeaInput |
   const spec = SYMBOL_MAP.get(symbol)
   if (!spec) return undefined
   const adjustment = adjustPlanFromPrompt(cleanPrompt)
-  const maxAmount = parseMaxAmountFromPrompt(cleanPrompt) ?? parseLeadingAmount(cleanPrompt) ?? 1000
+  const maxAmount = parseMaxAmountFromPrompt(cleanPrompt) ?? 1000
   const entryMid = midpoint(adjustment.entryLow, adjustment.entryHigh) ?? spec.open
   const doubles = /\b(?:double|doubles|2x)\b/i.test(cleanPrompt)
   const targetMid =
@@ -42,12 +42,6 @@ function findSymbol(prompt: string): string | undefined {
     .toUpperCase()
     .match(/\b[A-Z.]{1,6}\b/g)
     ?.find((token) => SYMBOL_MAP.has(token))
-}
-
-function parseLeadingAmount(prompt: string): number | undefined {
-  const match = prompt.match(/^\s*\$?\s*([\d,]+(?:\.\d{1,2})?)(?:\s+|$)/)
-  const amount = match ? Number(match[1].replaceAll(',', '')) : Number.NaN
-  return Number.isFinite(amount) && amount > 0 ? amount : undefined
 }
 
 function midpoint(low?: number, high?: number): number | undefined {

@@ -21,10 +21,17 @@ import type { PlannerIdea, PlannerIdeaSource, PlannerIntent } from '@/api/newsTy
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PositionContextPanel } from '@/components/positions/PositionContextPanel'
-import { useCreatePlannerIdea, useUpdatePlannerIdea } from '@/hooks/queries'
+import {
+  useCreatePlannerIdea,
+  usePortfolioMeta,
+  usePositions,
+  useUpdatePlannerIdea,
+} from '@/hooks/queries'
 import { planIntent, watchedPlanOptions } from '@/lib/planIntent'
 import { adjustPlanFromPrompt, parseMaxAmountFromPrompt } from '@/lib/planPrompt'
-import { usePrice } from '@/store/priceStore'
+import { usePrice, usePrices } from '@/store/priceStore'
+import { useUiStore } from '@/store/uiStore'
+import { computeTotals } from '@/lib/portfolioMath'
 import { optionMark } from '@/lib/optionMath'
 
 const ADD_PLAN_LIMIT = 3
@@ -57,6 +64,15 @@ export function PositionPlanSheet({
   onOpenPlanner: (plan: PlannerIdea) => void
 }) {
   const createPlan = useCreatePlannerIdea()
+  const accountId = useUiStore((state) => state.accountId)
+  const prices = usePrices()
+  const { data: accountPositions } = usePositions(accountId)
+  const { data: portfolioMeta } = usePortfolioMeta(accountId)
+  const portfolioMarketValue = computeTotals(accountPositions ?? [], prices).marketValue
+  const sizing = {
+    balance: portfolioMarketValue + (portfolioMeta?.cash ?? 0),
+    cash: portfolioMeta?.cash ?? 0,
+  }
   const underlying = usePrice(position.symbol)
   const underlyingPrice = underlying?.price ?? position.avgCost
   // The panel quotes the instrument being planned: the contract when there is
@@ -69,7 +85,7 @@ export function PositionPlanSheet({
   const [form, setForm] = useState<PlanFormState>(() => initialPlanForm(position))
   const canAdd = plans.length <= ADD_PLAN_LIMIT
   const suggestedMaxAmount = fallbackPositionMaxAmount(position)
-  const promptAdjustment = adjustPlanFromPrompt(form.originalPrompt)
+  const promptAdjustment = adjustPlanFromPrompt(form.originalPrompt, sizing)
   const promptMaxAmount = promptAdjustment.maxAmount
   const canSavePlan =
     Boolean(form.originalPrompt.trim()) &&
@@ -91,10 +107,12 @@ export function PositionPlanSheet({
 
   const handleCreate = async () => {
     const prompt = form.originalPrompt.trim()
-    const adjustment = adjustPlanFromPrompt(prompt)
-    const maxAmount = adjustment.maxAmount ?? parseMaxAmountFromPrompt(prompt)
+    const adjustment = adjustPlanFromPrompt(prompt, sizing)
+    const maxAmount = adjustment.maxAmount ?? parseMaxAmountFromPrompt(prompt, sizing)
     if (form.intent === 'open' && !maxAmount) {
-      setPromptError('Include a max amount in the prompt, e.g. “Open with max $1,500.”')
+      setPromptError(
+        'Include a max amount, e.g. “max $1,500,” “10% of balance,” or “1/4 of cash.”',
+      )
       return
     }
 
@@ -182,6 +200,7 @@ export function PositionPlanSheet({
             promptError={promptError}
             clearPromptError={() => setPromptError('')}
             position={position}
+            sizing={sizing}
           />
         ) : (
           <div className="space-y-2.5">
@@ -528,14 +547,16 @@ function AddPlanForm({
   promptError,
   clearPromptError,
   position,
+  sizing,
 }: {
   form: PlanFormState
   set: <K extends keyof PlanFormState>(key: K, value: PlanFormState[K]) => void
   promptError: string
   clearPromptError: () => void
   position: Position
+  sizing: { balance: number; cash: number }
 }) {
-  const adjustment = adjustPlanFromPrompt(form.originalPrompt)
+  const adjustment = adjustPlanFromPrompt(form.originalPrompt, sizing)
   const inferredEntryLow = adjustment.entryLow ?? position.avgCost
   const inferredEntryHigh = adjustment.entryHigh ?? position.avgCost
   const inferredTargetLow = adjustment.targetLow ?? position.ai.targetLow
@@ -615,7 +636,7 @@ function AddPlanForm({
             clearPromptError()
             set('originalPrompt', event.target.value)
           }}
-          placeholder="Max capital, targets and bands, de-risk strategy, horizon…"
+          placeholder="Max dollars, % or fraction of balance/cash, targets, risk, horizon…"
           aria-invalid={Boolean(promptError)}
           className={cn(
             planInputClass(Boolean(promptError)),
@@ -624,7 +645,7 @@ function AddPlanForm({
         />
         <span className="mt-1 block text-[10px] leading-relaxed text-white/58">
           {form.intent === 'open'
-            ? 'Type anything from max capital, price targets and bands, to a de-risk strategy or horizon. A max amount is required to open.'
+            ? 'Set max sizing in dollars or naturally, like “5% of capital” or “1/3 of cash.” A max amount is required to open.'
             : 'Type anything from price targets and bands to a de-risk strategy or horizon.'}
         </span>
       </PlanField>

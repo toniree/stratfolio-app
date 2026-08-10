@@ -17,6 +17,8 @@ const updateMutation = vi.hoisted(() => ({
 vi.mock('@/hooks/queries', () => ({
   useCreatePlannerIdea: () => mutation,
   useUpdatePlannerIdea: () => updateMutation,
+  usePositions: () => ({ data: [] }),
+  usePortfolioMeta: () => ({ data: { cash: 10_000, buyingPower: 10_000, totalDeposited: 0 } }),
 }))
 
 const position = {

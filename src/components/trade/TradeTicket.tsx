@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { CheckCircle2, Info, Minus, Plus } from 'lucide-react'
+import { Info, Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatQty } from '@/lib/format'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { HoldToConfirmButton } from '@/components/ui/HoldToConfirmButton'
+import { OrderRoutingAnimation } from '@/components/trade/OrderRoutingAnimation'
 import { BrokerageBadge } from '@/components/shared/BrokerageBadge'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { useSubmitOrder } from '@/hooks/queries'
@@ -66,6 +66,12 @@ export function TradeTicket({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialSide, position.quantity])
 
+  useEffect(() => {
+    if (step !== 'submitted') return
+    const timeout = window.setTimeout(() => onOpenChange(false), 2500)
+    return () => window.clearTimeout(timeout)
+  }, [step, onOpenChange])
+
   const adjust = (delta: number) => {
     setQtyText((current) => {
       const next = Math.max(1, (Number(current) || 0) + delta)
@@ -97,6 +103,8 @@ export function TradeTicket({
       open={open}
       onOpenChange={onOpenChange}
       size="wide"
+      showCloseButton={step !== 'submitted'}
+      className={step === 'submitted' ? 'order-confirmation' : undefined}
       title={titles[step]}
       description={
         step === 'submitted'
@@ -129,11 +137,7 @@ export function TradeTicket({
               {`Hold to submit ${side === 'BUY' ? 'buy' : 'sell'}`}
             </HoldToConfirmButton>
           </div>
-        ) : (
-          <Button className="w-full" size="lg" onClick={() => onOpenChange(false)}>
-            Done
-          </Button>
-        )
+        ) : undefined
       }
     >
       {step === 'ticket' ? (
@@ -361,14 +365,7 @@ function SubmittedBody({ order, unit }: { order: Order | null; unit: string }) {
   if (!order) return null
   return (
     <div className="py-2 text-center">
-      <motion.div
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 20 }}
-        className="liquid-inset mx-auto grid h-16 w-16 place-items-center rounded-full border-up/25 bg-up-soft shadow-[0_12px_34px_-18px_rgba(52,211,153,0.7)]"
-      >
-        <CheckCircle2 size={34} className="text-up" strokeWidth={2.2} />
-      </motion.div>
+      <OrderRoutingAnimation brokerageId={order.brokerageId} />
 
       <h3 className="mt-4 text-[19px] font-extrabold tracking-[-0.02em] text-ink">
         Order submitted ✓

@@ -20,4 +20,12 @@ describe('plannerInputFromPrompt', () => {
   it('requires a known ticker', () => {
     expect(plannerInputFromPrompt('buy something good before earnings')).toBeUndefined()
   })
+
+  it('uses a bare number above 30 as the plan amount', () => {
+    expect(plannerInputFromPrompt('Put 750 on NVDA for the next catalyst')?.maxAmount).toBe(750)
+  })
+
+  it('keeps the default amount for bare numbers at or below 30', () => {
+    expect(plannerInputFromPrompt('Put 30 on NVDA for the next catalyst')?.maxAmount).toBe(1000)
+  })
 })
