@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="StratFolioUI-PWA">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/StratFolioUI-PWA.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
