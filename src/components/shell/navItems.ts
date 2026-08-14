@@ -1,4 +1,4 @@
-import { BookOpen, House, LayoutList, LineChart, Newspaper, NotebookPen, Sparkles, User } from 'lucide-react'
+import { BookOpen, FlaskConical, House, LayoutList, LineChart, Newspaper, NotebookPen, Sparkles, User } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export interface NavItem {
@@ -11,6 +11,8 @@ export interface NavItem {
   primary: boolean
   /** Shown in the desktop left rail. */
   rail: boolean
+  /** Mobile tab position when it differs from rail order. */
+  mobileOrder?: number
 }
 
 /**
@@ -21,8 +23,12 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/app/portfolio', label: 'Portfolio', icon: LineChart, mobileLabel: 'Home', mobileIcon: House, primary: true, rail: true },
   { to: '/app/positions', label: 'Positions', icon: LayoutList, mobileLabel: 'Positions', primary: true, rail: true },
   { to: '/app/thesis', label: 'Theses', icon: Sparkles, primary: false, rail: true },
-  { to: '/app/news', label: 'News', icon: Newspaper, primary: true, rail: true },
-  { to: '/app/plan', label: 'Planner', icon: NotebookPen, primary: true, rail: true },
+  // News keeps its rail seat but hands its mobile tab to Research (it stays
+  // reachable behind "More").
+  { to: '/app/news', label: 'News', icon: Newspaper, primary: false, rail: true },
+  { to: '/app/plan', label: 'Planner', icon: NotebookPen, primary: true, rail: true, mobileOrder: 3 },
+  // Research takes News's old slot on the mobile tab bar.
+  { to: '/app/research', label: 'Research', icon: FlaskConical, primary: true, rail: true, mobileOrder: 2 },
   { to: '/app/activity', label: 'Activity', icon: BookOpen, primary: false, rail: true },
   { to: '/app/profile', label: 'Profile', icon: User, primary: false, rail: false },
 ]

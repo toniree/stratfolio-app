@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { Bot, ChevronRight, UserRound } from 'lucide-react'
+import { Bot, CheckCircle2, ChevronRight, Circle, UserRound } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney, relativeTime } from '@/lib/format'
 import type { PlannerIdea } from '@/api/newsTypes'
 import { TileShell } from '@/components/shared/TileShell'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
-import { planIntent, watchedPlanOptions } from '@/lib/planIntent'
+import { planCriteria, planIntent, watchedPlanOptions } from '@/lib/planIntent'
 import { triggerSoonPercent } from '@/lib/plannerSort'
 
 export function SourceBadge({ source }: { source: PlannerIdea['source'] }) {
@@ -108,9 +108,20 @@ export function PlannerIdeaTile({ idea, disabled = false }: { idea: PlannerIdea;
         <p className="text-[7.5px] font-bold tracking-[0.07em] text-ink-muted uppercase">
           Execution criteria
         </p>
-        <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-white/78">
-          {idea.notes || idea.title}
-        </p>
+        <ul className="mt-1 space-y-1">
+          {planCriteria(idea).slice(0, 2).map((criterion) => (
+            <li key={criterion.text} className="flex items-start gap-1.5">
+              {criterion.met ? (
+                <CheckCircle2 size={11} strokeWidth={2.4} className="mt-px shrink-0 text-up" />
+              ) : (
+                <Circle size={11} strokeWidth={2} className="mt-px shrink-0 text-ink-muted/70" />
+              )}
+              <span className="min-w-0 truncate text-[10px] leading-snug text-white/78">
+                {criterion.text}
+              </span>
+            </li>
+          ))}
+        </ul>
         {watchedOptions.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-1">
             {watchedOptions.map((option) => (

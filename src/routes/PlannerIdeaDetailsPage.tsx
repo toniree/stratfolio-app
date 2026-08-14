@@ -16,6 +16,7 @@ import { DirectionChip, SourceBadge } from '@/components/plan/PlannerIdeaTile'
 import { StaticPill } from '@/components/shared/Pill'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { PlanCriteriaList } from '@/components/plan/PlanCriteriaList'
 import { RelatedNews } from '@/components/news/RelatedNews'
 import { DetailStat, NotFound } from '@/components/shared/DetailPrimitives'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
@@ -115,12 +116,7 @@ export function PlannerIdeaDetailsPage() {
 
         {/* The criteria are the plan — they belong with it, not three tiles down. */}
         <div className="mt-3 rounded-[16px] border border-line bg-white/[0.03] px-3 py-2.5">
-          <p className="text-[8px] font-extrabold tracking-[0.08em] text-ink-muted uppercase">
-            Execution criteria
-          </p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
-            {idea.notes || idea.title}
-          </p>
+          <PlanCriteriaList plan={idea} />
         </div>
 
         <div className="mt-3.5 flex flex-wrap items-center gap-2">

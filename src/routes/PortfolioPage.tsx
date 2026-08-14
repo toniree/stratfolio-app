@@ -5,6 +5,7 @@ import { useThesisDecisionStore } from '@/store/thesisDecisionStore'
 import { usePrices } from '@/store/priceStore'
 import {
   useIdeas,
+  useActivity,
   usePerformance,
   usePlannerIdeas,
   usePortfolioMeta,
@@ -15,7 +16,7 @@ import { computeTotals } from '@/lib/portfolioMath'
 import type { PerformancePeriod } from '@/api/types'
 import { PeriodSelector } from '@/components/portfolio/PeriodSelector'
 import { PerformanceChart } from '@/components/charts/PerformanceChart'
-import { MetricWidgets, PortfolioRiskWidgets } from '@/components/portfolio/MetricWidget'
+import { MetricWidgets } from '@/components/portfolio/MetricWidget'
 import {
   PortfolioChartPanel,
   PortfolioValueWidget,
@@ -31,6 +32,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { formatSignedMoney, formatSignedPercent } from '@/lib/format'
 import { CompactAITradingToggle } from '@/components/shell/AITradingControl'
 import { ThesisSparklesIcon } from '@/components/thesis/ThesisSparklesIcon'
+import { TerminalChart } from '@/components/terminal/TerminalChart'
 
 /**
  * Row 1 is a full-width metrics strip led by a compact portfolio-value widget
@@ -51,6 +53,7 @@ export function PortfolioPage() {
   const { data: performance } = usePerformance(accountId, period)
   const { data: ideas, isLoading: ideasLoading } = useIdeas()
   const { data: plannerIdeas, isLoading: plannerLoading } = usePlannerIdeas()
+  const { data: activity } = useActivity()
   const thesisDecisions = useThesisDecisionStore((s) => s.decisions)
 
   const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
@@ -159,31 +162,65 @@ export function PortfolioPage() {
       {metricsStrip}
       {chartPanel}
 
-      {/* ---------- Row 2: compact metrics + positions + AI outlook ---------- */}
-      <div className="hidden lg:grid lg:grid-cols-12 lg:items-start lg:gap-5 xl:grid-cols-[180px_minmax(0,1fr)_280px]">
-        <PortfolioRiskWidgets
-          totals={totals}
-          loading={isLoading}
-          className="col-span-12 xl:col-auto"
-        />
+      {/* ---------- Row 2: the trading terminal ----------
+          Left: the big multi-study chart over the holdings blotter — the two
+          surfaces a trader lives in. Right: everything the AI is watching for
+          you — plans about to execute, the portfolio outlook, fresh theses. */}
+      <div className="hidden lg:grid lg:grid-cols-12 lg:items-start lg:gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
+        <div className="col-span-12 min-w-0 space-y-4 xl:col-auto">
+          <TerminalChart />
 
-        <div className="col-span-12 space-y-3 xl:col-auto">
-          <BrokerageFilter counts={counts} />
-          <HoldingsTable
-            valuations={visible}
-            loading={isLoading}
-            totalMarketValue={totals.marketValue}
-          />
+          <div className="space-y-3">
+            <BrokerageFilter counts={counts} />
+            <HoldingsTable
+              valuations={visible}
+              loading={isLoading}
+              totalMarketValue={totals.marketValue}
+            />
+          </div>
         </div>
 
-        <div className="col-span-12 xl:col-auto">
+        <div className="col-span-12 min-w-0 space-y-4 xl:col-auto">
+          <UpcomingTradePlans
+            plans={plannerIdeas ?? []}
+            valuations={totals.valuations}
+            portfolioValue={totals.marketValue}
+            loading={plannerLoading || isLoading}
+          />
+
           <AIOutlookPanel
             outlook={outlook}
             valuations={totals.valuations}
+            activity={activity}
+            plans={plannerIdeas}
             loading={outlookLoading || isLoading}
-            className="h-[620px]"
+            className="h-[440px]"
             onRefresh={() => refetchOutlook()}
           />
+
+          <section aria-label="Trade theses" className="space-y-2.5">
+            <div className="flex items-baseline justify-between px-0.5">
+              <span className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-[0.075em] text-ink-soft uppercase">
+                <ThesisSparklesIcon />
+                Trade Theses
+              </span>
+              <Link
+                to="/app/thesis"
+                className="text-[11px] font-bold text-brand-300 transition-colors hover:text-brand-200"
+              >
+                See all
+              </Link>
+            </div>
+            {ideasLoading ? (
+              <Skeleton className="h-[268px] rounded-[18px]" />
+            ) : (
+              <div className="space-y-3">
+                {topRecs.slice(0, 3).map((idea) => (
+                  <RecTile key={idea.id} idea={idea} />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
@@ -247,34 +284,12 @@ export function PortfolioPage() {
         <MobileAIInsights
           outlook={outlook}
           valuations={totals.valuations}
+          activity={activity}
+          plans={plannerIdeas}
           loading={outlookLoading || isLoading}
           onRefresh={() => refetchOutlook()}
         />
       </div>
-
-      {/* ---------- Shared rows ---------- */}
-      <Carousel
-        className="hidden lg:block"
-        title="Trade Theses"
-        titleIcon={<ThesisSparklesIcon />}
-        titleClassName="text-[17px] font-bold tracking-[-0.01em] text-white/72 sm:text-[18px]"
-        subtitle={<ThesisResearchTicker />}
-        seeAllTo="/app/thesis"
-        itemCount={ideasLoading ? 3 : topRecs.length}
-        empty={<EmptyRow title="No new theses right now" />}
-      >
-        {ideasLoading
-          ? Array.from({ length: 3 }).map((_, i) => (
-              <CarouselItem key={i}>
-                <Skeleton className="h-[268px] rounded-[18px]" />
-              </CarouselItem>
-            ))
-          : topRecs.map((idea) => (
-              <CarouselItem key={idea.id}>
-                <RecTile idea={idea} />
-              </CarouselItem>
-            ))}
-      </Carousel>
 
       <p className="pt-1 pb-2 text-center text-[10.9px] text-[#5b6673]">
         Every price, position and AI output in this build is simulated.{' '}

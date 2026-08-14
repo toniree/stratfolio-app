@@ -29,6 +29,8 @@ interface RepromptState {
   record: (reference: AssistantReference, question: string) => string
   attachAnswer: (recordId: string, answer: string) => void
   forEntity: (kind: RepromptEntityKind, id: string) => RepromptRecord[]
+  /** Forgets every captured steer — the training-signal half of "reset memory". */
+  clearAll: () => void
 }
 
 export function entityKey(kind: RepromptEntityKind, id: string): string {
@@ -79,6 +81,8 @@ export const useRepromptStore = create<RepromptState>()(
         }),
 
       forEntity: (kind, id) => get().byEntity[entityKey(kind, id)] ?? [],
+
+      clearAll: () => set({ byEntity: {} }),
     }),
     { name: 'stratfolio.reprompts.v1' },
   ),

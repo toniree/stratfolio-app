@@ -73,7 +73,7 @@ export function ThesisTileFooter({
 }) {
   const [question, setQuestion] = useState('')
   const [minimized, setMinimized] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const sendMessage = useAssistantChatStore((state) => state.sendMessage)
   const thinking = useAssistantChatStore((state) => state.thinking)
   const decide = useThesisDecisionStore((state) => state.decide)
@@ -90,6 +90,17 @@ export function ThesisTileFooter({
   const reset = () => {
     setQuestion('')
     setMinimized(false)
+    if (inputRef.current) inputRef.current.style.height = ''
+  }
+
+  /**
+   * The composer is anchored to the footer's bottom edge, so growing the
+   * field's height expands the bubble upward. Height tracks content up to
+   * four lines, then the field scrolls internally.
+   */
+  const autosize = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 96)}px`
   }
 
   const contract = idea.option
@@ -213,10 +224,22 @@ export function ThesisTileFooter({
 
           <div className="flex min-w-0 items-center">
             <div className="relative min-w-0 flex-1">
-              <input
+              <textarea
                 ref={inputRef}
+                rows={1}
                 value={question}
-                onChange={(event) => setQuestion(event.target.value)}
+                onChange={(event) => {
+                  setQuestion(event.target.value)
+                  autosize(event.target)
+                }}
+                onKeyDown={(event) => {
+                  // Enter sends, Shift+Enter breaks the line — the same contract
+                  // as every desktop chat composer.
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    event.currentTarget.form?.requestSubmit()
+                  }
+                }}
                 onClick={(event) => event.stopPropagation()}
                 onFocus={() => setMinimized(false)}
                 aria-label={`Ask AI about the ${idea.symbol} thesis`}
@@ -224,7 +247,7 @@ export function ThesisTileFooter({
                 // whole prompt can be read rather than truncated.
                 placeholder={prompt}
                 className={cn(
-                  'liquid-control h-9 w-full min-w-0 rounded-full px-3 text-[11px] text-ink outline-none',
+                  'liquid-control block max-h-24 min-h-9 w-full min-w-0 resize-none overflow-y-auto rounded-[18px] px-3 py-2 text-[11px] leading-[1.45] text-ink outline-none',
                   'placeholder:text-transparent',
                 )}
               />

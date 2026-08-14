@@ -25,7 +25,7 @@ export interface SymbolSpec {
 export const SYMBOLS: SymbolSpec[] = [
   { symbol: 'NVDA', company: 'NVIDIA Corp.', previousClose: 174.32, open: 175.9, volatility: 1.5, drift: 0.011 },
   { symbol: 'AAPL', company: 'Apple Inc.', previousClose: 231.18, open: 231.5, volatility: 0.7, drift: 0.004 },
-  { symbol: 'MSFT', company: 'Microsoft Corp.', previousClose: 428.64, open: 429.2, volatility: 0.75, drift: 0.005 },
+  { symbol: 'MSFT', company: 'Microsoft Corp.', previousClose: 493.7, open: 494.6, volatility: 0.75, drift: 0.004 },
   { symbol: 'AMD', company: 'Advanced Micro Devices', previousClose: 158.77, open: 159.3, volatility: 1.7, drift: 0.004 },
   { symbol: 'TSLA', company: 'Tesla Inc.', previousClose: 316.4, open: 313.2, volatility: 2.1, drift: -0.012 },
   { symbol: 'PLTR', company: 'Palantir Technologies', previousClose: 74.91, open: 75.8, volatility: 2.0, drift: 0.014 },

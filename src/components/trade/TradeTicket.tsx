@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Info, Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatQty } from '@/lib/format'
@@ -40,6 +40,8 @@ export function TradeTicket({
   const [qtyText, setQtyText] = useState(String(Math.max(1, Math.floor(position.quantity / 3))))
   const [order, setOrder] = useState<Order | null>(null)
   const submitOrder = useSubmitOrder()
+  const onOpenChangeRef = useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
 
   const isOption = position.assetType === 'option'
   const contractMultiplier = isOption ? 100 : 1
@@ -68,9 +70,9 @@ export function TradeTicket({
 
   useEffect(() => {
     if (step !== 'submitted') return
-    const timeout = window.setTimeout(() => onOpenChange(false), 2500)
+    const timeout = window.setTimeout(() => onOpenChangeRef.current(false), 2500)
     return () => window.clearTimeout(timeout)
-  }, [step, onOpenChange])
+  }, [step])
 
   const adjust = (delta: number) => {
     setQtyText((current) => {

@@ -3,6 +3,9 @@ import { cn } from '@/lib/cn'
 
 type Variant = 'gradient' | 'mono' | 'inverse'
 
+const PLINTH_PATH = 'M10.6 39h26.8a2 2 0 0 1 2 2v1.1a2 2 0 0 1-2 2H10.6a2 2 0 0 1-2-2V41a2 2 0 0 1 2-2z'
+const KNIGHT_PATH = 'M30.4 1.8 33.6 9.2c3 3 4.8 7 4.8 11.4V39H13.6v-3.6c0-4 1.6-7.8 4.5-10.6L21 22c-2.8 1-5.7 1.6-8.7 1.9l-2.9.3c-2.5.3-4.5-2-4-4.5.3-1.5 1.5-2.6 3-2.8l4-.6c3.5-.6 6.6-2.4 8.9-5.1l3.5-4.2c1.2-1.4 2.8-2.4 4.6-2.8z'
+
 /**
  * StratFolio mark — a chess knight whose mane resolves into a rising arrow.
  *
@@ -15,13 +18,17 @@ export function LogoMark({
   size = 32,
   variant = 'gradient',
   className,
+  trace = false,
 }: {
   size?: number
   variant?: Variant
   className?: string
+  /** Animate a highlight around the mark's silhouette. */
+  trace?: boolean
 }) {
   const id = useId().replace(/:/g, '')
   const gradientId = `sf-mark-${id}`
+  const traceGradientId = `sf-trace-${id}`
   const maskId = `sf-mask-${id}`
 
   const fill =
@@ -46,6 +53,10 @@ export function LogoMark({
           <stop offset="0%" stopColor="#3b82f6" />
           <stop offset="52%" stopColor="#6366f1" />
           <stop offset="100%" stopColor="#8b5cf6" />
+        </linearGradient>
+        <linearGradient id={traceGradientId} x1="5" y1="43" x2="41" y2="4" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#5ba6ff" />
+          <stop offset="100%" stopColor="#c98bff" />
         </linearGradient>
 
         {/* The rising arrow is knocked out of the knight, not drawn on top of
@@ -74,13 +85,28 @@ export function LogoMark({
 
       <g mask={`url(#${maskId})`} fill={fill}>
         {/* Plinth */}
-        <path d="M10.6 39h26.8a2 2 0 0 1 2 2v1.1a2 2 0 0 1-2 2H10.6a2 2 0 0 1-2-2V41a2 2 0 0 1 2-2z" />
+        <path d={PLINTH_PATH} />
         {/* Knight, facing left. Traced clockwise from the ear tip: back of the
             ear, down the mane, across the base of the neck, up the chest to
             the throat, out along the jaw to the muzzle, around the nose, then
             back up the length of the face to the forehead. */}
-        <path d="M30.4 1.8 33.6 9.2c3 3 4.8 7 4.8 11.4V39H13.6v-3.6c0-4 1.6-7.8 4.5-10.6L21 22c-2.8 1-5.7 1.6-8.7 1.9l-2.9.3c-2.5.3-4.5-2-4-4.5.3-1.5 1.5-2.6 3-2.8l4-.6c3.5-.6 6.6-2.4 8.9-5.1l3.5-4.2c1.2-1.4 2.8-2.4 4.6-2.8z" />
+        <path d={KNIGHT_PATH} />
       </g>
+
+      {trace ? (
+        <g
+          mask={`url(#${maskId})`}
+          fill="none"
+          stroke={`url(#${traceGradientId})`}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d={KNIGHT_PATH} pathLength={100} className="sf-logo-trace" />
+          <path d={PLINTH_PATH} pathLength={100} className="sf-logo-trace sf-logo-trace-delayed" />
+        </g>
+      ) : null}
     </svg>
   )
 }

@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation, Link } from 'react-router-dom'
-import { ChevronRight, MoreHorizontal, Plus, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { ChevronRight, MoreHorizontal, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { formatMoney } from '@/lib/format'
 import { NAV_ITEMS } from '@/components/shell/navItems'
 import { Logo } from '@/components/brand/Logo'
 import { AITradingControl } from '@/components/shell/AITradingControl'
@@ -10,9 +9,11 @@ import { OrderToastHost } from '@/components/shell/OrderToastHost'
 import { TopBar } from '@/components/shell/TopBar'
 import { NewsToastHost } from '@/components/news/NewsToastHost'
 import { FloatingAssistant } from '@/components/assistant/FloatingAssistant'
-import { usePortfolioMeta } from '@/hooks/queries'
+import { Watchlist } from '@/components/terminal/Watchlist'
+import { usePositions } from '@/hooks/queries'
 import { useUiStore } from '@/store/uiStore'
 import { MobileNotificationSettings } from '@/components/shell/MobileNotificationSettings'
+import { SidebarBrokerageSelector } from '@/components/portfolio/BrokerageFilter'
 
 /**
  * Chrome vs content.
@@ -28,7 +29,14 @@ export function AppShell() {
   const accountId = useUiStore((s) => s.accountId)
   const hasUnreadNews = useUiStore((s) => s.hasUnreadNews)
   const setHasUnreadNews = useUiStore((s) => s.setHasUnreadNews)
-  const { data: meta } = usePortfolioMeta(accountId)
+  const { data: positions } = usePositions(accountId)
+  const brokerageCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const position of positions ?? []) {
+      counts[position.brokerageId] = (counts[position.brokerageId] ?? 0) + 1
+    }
+    return counts
+  }, [positions])
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -37,7 +45,10 @@ export function AppShell() {
   }, [location.pathname, setHasUnreadNews])
 
   const rail = NAV_ITEMS.filter((i) => i.rail)
-  const primary = NAV_ITEMS.filter((i) => i.primary)
+  const primary = NAV_ITEMS.filter((i) => i.primary).sort(
+    (a, b) =>
+      (a.mobileOrder ?? NAV_ITEMS.indexOf(a)) - (b.mobileOrder ?? NAV_ITEMS.indexOf(b)),
+  )
   const secondary = NAV_ITEMS.filter((i) => !i.primary)
   const secondaryActive = secondary.some((i) => location.pathname.startsWith(i.to))
 
@@ -45,12 +56,12 @@ export function AppShell() {
     <div className="min-h-svh">
       <OrderToastHost />
       {/* ---------- Desktop: slim left rail ---------- */}
-      <aside className="glass-nav fixed inset-y-0 left-0 z-30 hidden w-[236px] flex-col border-r border-line px-3 py-5 lg:flex">
-        <div className="px-2 pb-6">
-          <Logo />
+      <aside className="glass-nav fixed inset-y-0 left-0 z-30 hidden w-[284px] flex-col border-r border-line px-3 py-5 lg:flex">
+        <div className="px-2 pb-7">
+          <Logo size={40} wordmarkClassName="text-[24px]" />
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1" aria-label="Primary">
+        <nav className="flex flex-col gap-1" aria-label="Primary">
           {rail.map((item) => (
             <NavLink
               key={item.to}
@@ -84,38 +95,21 @@ export function AppShell() {
           ))}
         </nav>
 
+        {/* Live ticker collection fills the rail between nav and the foot. */}
+        <Watchlist className="mt-4 flex-1 border-t border-line pt-3" />
+
         {/* Buying power card pinned to the rail's foot, per the mockup. */}
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-2.5">
           <AITradingControl />
-          <div className="glass rounded-[18px] p-3.5">
-            <Link
-              to="/app/positions"
-              className="flex items-center justify-between gap-2 text-ink-muted transition-colors hover:text-ink"
-            >
-              <span className="text-[11.5px] font-semibold">Buying power</span>
-              <ChevronRight size={15} />
-            </Link>
-            <div className="num mt-1 text-[19px] font-extrabold tracking-[-0.02em] text-ink">
-              {formatMoney(meta?.buyingPower ?? 0)}
-            </div>
-            <button
-              type="button"
-              className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-white/[0.04] px-3 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-white/[0.08]"
-            >
-              Deposit funds
-              <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-500 text-white">
-                <Plus size={13} />
-              </span>
-            </button>
-          </div>
+          <SidebarBrokerageSelector counts={brokerageCounts} />
         </div>
       </aside>
 
       <TopBar />
 
       {/* ---------- Content ---------- */}
-      <main className="lg:pl-[236px]">
-        <div className="mx-auto max-w-[1440px] px-4 pt-4 pb-28 sm:px-6 lg:pb-10">
+      <main className="lg:pl-[284px]">
+        <div className="mx-auto max-w-[1440px] px-4 pt-4 pb-28 sm:px-6 lg:max-w-[1392px] lg:px-0 lg:pb-10">
           <Outlet />
         </div>
       </main>

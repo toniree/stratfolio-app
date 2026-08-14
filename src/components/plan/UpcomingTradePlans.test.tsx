@@ -6,6 +6,7 @@ import type { PlannerIdea } from '@/api/newsTypes'
 import type { PositionValuation } from '@/lib/portfolioMath'
 import { UpcomingTradePlans } from '@/components/plan/UpcomingTradePlans'
 import { usePlanExecutionStore } from '@/store/planExecutionStore'
+import { useUiStore } from '@/store/uiStore'
 
 function plan(
   id: string,
@@ -43,6 +44,7 @@ function plan(
 describe('UpcomingTradePlans', () => {
   it('shows two ranked rows by default and can reveal the remaining plan', () => {
     usePlanExecutionStore.setState({ disabledIds: [] })
+    useUiStore.setState({ aiTradingEnabled: false })
     const readyValuation = {
       position: { id: 'ready-position', quantity: 6 },
       marketValue: 2400,
@@ -87,11 +89,17 @@ describe('UpcomingTradePlans', () => {
     expect(rows[0]).toHaveTextContent('READY')
     expect(container.querySelectorAll('[data-plan-source="user"]')).toHaveLength(2)
     expect(container.querySelectorAll('[data-plan-source="ai"]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-plan-source="user"] .line-through')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-plan-source="ai"] .line-through')).toHaveLength(1)
     // Readiness reads as a ring: the figure and its percent sit inside, "chance" beneath.
     expect(rows.every((row) => /\d+%\s*chance/i.test(row.textContent ?? ''))).toBe(true)
 
     fireEvent.click(rows[0])
-    expect(screen.getByText('ready criteria are nearly satisfied.')).toBeInTheDocument()
+    // The expanded panel now leads with the criteria checklist and exit plan.
+    expect(screen.getByText('Execution criteria')).toBeInTheDocument()
+    expect(screen.getByText('Exit plan')).toBeInTheDocument()
+    expect(screen.getByText('Exit range')).toBeInTheDocument()
+    expect(screen.getByText('Risk/reward')).toBeInTheDocument()
     expect(screen.getByText('$10.00–$12.00')).toBeInTheDocument()
     expect(screen.getByText('Close')).toBeInTheDocument()
     expect(screen.getByText('Profit')).toBeInTheDocument()

@@ -127,7 +127,10 @@ export function RecDetailsPage() {
       <section className="card space-y-3.5 p-4 sm:p-5">
         <RiskRewardMeter
           bare
-          currentPrice={price}
+          // For option theses the targets are premium targets, so the meter
+          // must be anchored to the contract mark — measuring a $52 premium
+          // target against a $495 underlying printed nonsense percentages.
+          currentPrice={idea.option ? premium : price}
           upsideTarget={idea.ai.upsideTarget}
           downsideRisk={idea.ai.downsideRisk}
           riskRewardRatio={idea.ai.riskRewardRatio}
@@ -161,6 +164,17 @@ export function RecDetailsPage() {
                 </div>
               </div>
             ) : null}
+            <div>
+              <div className="mb-1.5 text-[9.5px] font-bold tracking-[0.07em] text-ink-muted uppercase">
+                Target range
+              </div>
+              <div className="num text-[22px] leading-none font-extrabold tracking-[-0.025em] text-up">
+                {formatMoney(idea.targetLow)}–{formatMoney(idea.targetHigh)}
+              </div>
+              <div className="num mt-1.5 text-[12.5px] font-medium text-ink-muted">
+                on the flip
+              </div>
+            </div>
           </div>
 
           {/* Conviction and the call sit in the hero above; repeating them here

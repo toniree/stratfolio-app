@@ -354,6 +354,11 @@ export const NEWS_PLANNER_IDEAS: PlannerIdea[] = [
     ],
     createdAt: minsAgo(62),
     author: 'StratFolio AI',
+    criteria: [
+      { text: 'Premium inside the $8.40–$10.20 entry band', met: true },
+      { text: 'MU holds the 21d VWAP — three consecutive closes above', met: true },
+      { text: '30d IV rank below the 40th percentile at fill', met: false },
+    ],
     sourceArticleId: 'news-mu-hbm',
     sourceArticleHeadline:
       'Micron says HBM4 capacity is sold out through next calendar year at pre-negotiated pricing',
@@ -797,6 +802,11 @@ export const USER_PLANNER_IDEAS: PlannerIdea[] = [
     author: 'You',
     relatedNews: 'Walmart FY2027 Q2 earnings release · Aug 20, 2026',
     watchedOptions: ["$105 Call · SEP 18 '26"],
+    criteria: [
+      { text: 'EPS beat of 3%+ with the FY guide reaffirmed', met: false },
+      { text: 'Sell 30% into the first-hour liquidity window', met: false },
+      { text: 'Gap-up holds the 5d EMA at the 10:30 ET check', met: false },
+    ],
   },
   {
     id: 'plan-user-wmt-earnings-close',
@@ -827,6 +837,11 @@ export const USER_PLANNER_IDEAS: PlannerIdea[] = [
     author: 'You',
     relatedNews: 'Walmart FY2027 Q2 earnings release · Aug 20, 2026',
     watchedOptions: ["$105 Call · SEP 18 '26"],
+    criteria: [
+      { text: 'Fiscal Q2 EPS prints below the $0.74 consensus', met: false },
+      { text: 'Exit inside the first 15 minutes of the Aug 20 session', met: false },
+      { text: 'Mark holds above the $2.40 stop pre-print', met: true },
+    ],
   },
   {
     id: 'plan-user-pltr-trim-195',
@@ -855,6 +870,11 @@ export const USER_PLANNER_IDEAS: PlannerIdea[] = [
     createdAt: new Date(Date.now() - 90 * 60_000).toISOString(),
     author: 'You',
     watchedOptions: ["$95 Call · JAN 15 '27"],
+    criteria: [
+      { text: 'PLTR prints $195 ± 0.5% intraday', met: false },
+      { text: '14d RSI above 70 — trim into strength', met: true },
+      { text: 'Bid/ask spread inside 4% of mark at execution', met: true },
+    ],
   },
   {
     id: 'plan-user-amd',

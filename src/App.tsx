@@ -11,6 +11,7 @@ import { RecDetailsPage } from '@/routes/RecDetailsPage'
 import { NewsPage } from '@/routes/NewsPage'
 import { ArticlePage } from '@/routes/ArticlePage'
 import { PlannerPage } from '@/routes/PlannerPage'
+import { ResearchPage } from '@/routes/ResearchPage'
 import { PlannerIdeaDetailsPage } from '@/routes/PlannerIdeaDetailsPage'
 import { ActivityPage } from '@/routes/ActivityPage'
 import { ProfilePage } from '@/routes/ProfilePage'
@@ -50,6 +51,7 @@ export default function App() {
             <Route path="news/:id" element={<ArticlePage />} />
             <Route path="plan" element={<PlannerPage />} />
             <Route path="plan/:id" element={<PlannerIdeaDetailsPage />} />
+            <Route path="research" element={<ResearchPage />} />
             <Route path="activity" element={<ActivityPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>

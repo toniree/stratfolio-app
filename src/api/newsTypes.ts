@@ -30,6 +30,12 @@ export type PlannerDirection = 'LONG' | 'SHORT'
 export type PlannerStatus = 'draft' | 'watching' | 'ready'
 export type PlannerIntent = 'open' | 'close'
 
+/** One executable condition on a trade plan, with live met/unmet state. */
+export interface PlanCriterion {
+  text: string
+  met: boolean
+}
+
 export interface PlannerIdea {
   id: string
   /** Exact open-position association when a plan was saved from a holding. */
@@ -66,6 +72,8 @@ export interface PlannerIdea {
   sourceArticleHeadline?: string
   /** Free-form related-news context for user-created position plans. */
   relatedNews?: string
+  /** Concrete, checkable execution conditions; generated when absent. */
+  criteria?: PlanCriterion[]
   /** One to three option contracts or setups monitored for this plan. */
   watchedOptions?: string[]
   /** AI ideas carry a full assessment; user ideas get a lightweight one. */
@@ -96,6 +104,7 @@ export interface CreatePlannerIdeaInput {
 }
 
 export interface UpdatePlannerIdeaInput {
+  criteria?: PlanCriterion[]
   intent?: PlannerIntent
   originalPrompt?: string
   notes?: string

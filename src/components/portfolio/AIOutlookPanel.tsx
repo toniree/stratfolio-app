@@ -4,34 +4,56 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowUpRight,
+  ArrowLeft,
+  Bot,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  ClipboardCheck,
+  FilePenLine,
   MessageCircle,
   Minus,
   PieChart,
   RefreshCw,
   SendHorizonal,
-  Sparkles,
+  Settings,
+  UserRound,
   TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatSignedPercent, relativeTime } from '@/lib/format'
-import type { PortfolioOutlook } from '@/api/types'
+import type { ActivityEvent, PortfolioOutlook } from '@/api/types'
+import type { PlannerIdea } from '@/api/newsTypes'
 import type { PositionValuation } from '@/lib/portfolioMath'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { AssistantAvatar } from '@/components/assistant/AssistantAvatar'
-import { useAssistantChatStore } from '@/store/assistantChatStore'
+import { useAssistantChatStore, type AssistantChatMessage } from '@/store/assistantChatStore'
+import { useRepromptStore, type RepromptRecord } from '@/store/repromptStore'
 import { daysToExpiry, moneynessLabel } from '@/lib/optionMath'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
+import { LogoMark } from '@/components/brand/Logo'
+import { AISettingsModal } from '@/components/assistant/AISettingsModal'
 
 const DRIVER_ICONS = [TrendingUp, CircleDollarSign, PieChart]
+
+const byNewestReprompt = (a: RepromptRecord, b: RepromptRecord) =>
+  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
 
 const PLACEHOLDERS = [
   'Ask me anything — e.g. "When should I sell my PLTRs?"',
   'Ask me anything — e.g. "Should I roll the SNDK calls?"',
   'Ask me anything — e.g. "What does the memory selloff mean for MU?"',
+]
+
+type OutlookTab = 'keys' | 'actions' | 'tests' | 'chats'
+
+const OUTLOOK_TABS: { id: OutlookTab; label: string }[] = [
+  { id: 'keys', label: 'Keys' },
+  { id: 'actions', label: 'Actions' },
+  { id: 'tests', label: 'Tests' },
+  { id: 'chats', label: 'Chats' },
 ]
 
 /**
@@ -50,6 +72,10 @@ export function AIOutlookPanel({
   onRefresh,
   onMinimize,
   onChatStart,
+  activity = [],
+  plans = [],
+  full = false,
+  initialTab = 'keys',
 }: {
   outlook?: PortfolioOutlook
   valuations: PositionValuation[]
@@ -58,11 +84,29 @@ export function AIOutlookPanel({
   onRefresh?: () => Promise<unknown> | void
   onMinimize?: () => void
   onChatStart?: () => void
+  activity?: ActivityEvent[]
+  plans?: PlannerIdea[]
+  /**
+   * Force the desktop treatment (tabs, StratFolio AI identity, AI settings)
+   * regardless of breakpoint — used by the mobile assistant sheet so a tapped
+   * chat bubble opens the exact desktop chatbox.
+   */
+  full?: boolean
+  initialTab?: OutlookTab
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [index, setIndex] = useState(0)
   const [refreshedAt, setRefreshedAt] = useState(outlook?.updatedAt ?? new Date().toISOString())
   const [refreshing, setRefreshing] = useState(false)
+  const [tab, setTab] = useState<OutlookTab>(initialTab)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
+  const messages = useAssistantChatStore((state) => state.messages)
+  const repromptsByEntity = useRepromptStore((state) => state.byEntity)
+  const reprompts = useMemo(
+    () => Object.values(repromptsByEntity).flat().sort(byNewestReprompt),
+    [repromptsByEntity],
+  )
 
   useEffect(() => {
     if (outlook?.updatedAt) setRefreshedAt(outlook.updatedAt)
@@ -126,36 +170,106 @@ export function AIOutlookPanel({
         aria-hidden
       />
 
-      <header className="relative flex items-center gap-2 border-b border-line px-4 py-3.5">
-        <AssistantAvatar size={28} className="lg:hidden" />
-        <span className="hidden h-7 w-7 place-items-center rounded-lg bg-brand-100 text-brand-300 lg:grid">
-          <Sparkles size={15} />
-        </span>
-        <h2 className="text-[14.5px] font-bold text-ink">
-          <span className="lg:hidden">StratFolio Insights</span>
-          <span className="hidden lg:inline">AI Outlook</span>
-        </h2>
-        <Link
-          to="/app/thesis"
-          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg border border-line bg-white/[0.04] px-2 py-1.5 text-[10px] font-bold text-ink transition-colors hover:bg-white/[0.08]"
-        >
-          View full outlook
-          <ChevronRight size={12} />
-        </Link>
-        {onMinimize ? (
+      <header className="relative border-b border-line px-4 pt-3.5 pb-2.5">
+        <div className="flex items-center gap-2">
+          <AssistantAvatar size={28} className={cn(full ? 'hidden' : 'lg:hidden')} />
+          <span
+            className={cn(
+              'h-7 w-7 place-items-center rounded-lg bg-brand-100',
+              full ? 'grid' : 'hidden lg:grid',
+            )}
+          >
+            <LogoMark size={23} trace />
+          </span>
+          <h2 className="text-[14.5px] font-bold text-ink">
+            <span className={cn(full ? 'hidden' : 'lg:hidden')}>StratFolio Insights</span>
+            <span className={cn(full ? 'inline' : 'hidden lg:inline')}>StratFolio AI</span>
+          </h2>
+          <Link
+            to="/app/thesis"
+            className={cn(
+              'ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg border border-line bg-white/[0.04] px-2 py-1.5 text-[10px] font-bold text-ink transition-colors hover:bg-white/[0.08]',
+              full ? 'hidden' : 'lg:hidden',
+            )}
+          >
+            View full outlook
+            <ChevronRight size={12} />
+          </Link>
           <button
             type="button"
-            onClick={onMinimize}
-            aria-label="Minimize StratFolio Insights"
-            className="liquid-control grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-muted transition-[color,transform] hover:text-ink active:scale-95"
+            onClick={() => setSettingsOpen(true)}
+            className={cn(
+              'ml-auto shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white/[0.04] px-2 py-1.5 text-[10px] font-bold text-ink transition-colors hover:bg-white/[0.08]',
+              full ? 'inline-flex' : 'hidden lg:inline-flex',
+            )}
           >
-            <Minus size={14} strokeWidth={2.5} />
+            <Settings size={12} />
+            AI settings
           </button>
-        ) : null}
+          {onMinimize ? (
+            <button
+              type="button"
+              onClick={onMinimize}
+              aria-label="Minimize StratFolio Insights"
+              className="liquid-control grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-muted transition-[color,transform] hover:text-ink active:scale-95"
+            >
+              <Minus size={14} strokeWidth={2.5} />
+            </button>
+          ) : null}
+        </div>
+
+        <nav
+          className={cn(
+            'mt-2.5 grid-cols-4 gap-1 rounded-lg bg-black/15 p-1',
+            full ? 'grid' : 'hidden lg:grid',
+          )}
+          aria-label="StratFolio AI sections"
+        >
+          {OUTLOOK_TABS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setTab(item.id)
+                setSelectedChatId(null)
+              }}
+              aria-current={tab === item.id ? 'page' : undefined}
+              className={cn(
+                'rounded-md px-1 py-1.5 text-[10px] font-bold transition-colors',
+                tab === item.id
+                  ? 'bg-brand-500/25 text-brand-200'
+                  : 'text-ink-muted hover:bg-white/[0.05] hover:text-ink',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      {/* ---- Swipeable card stack ---- */}
-      <div className="relative min-h-0 flex-1 overflow-clip">
+      <div className={cn('relative min-h-0 flex-1 overflow-hidden', full ? 'block' : 'hidden lg:block')}>
+        {tab === 'keys' ? (
+          <MarketOutlookCard
+            outlook={outlook}
+            refreshedAt={refreshedAt}
+            refreshing={refreshing}
+            onRefresh={() => void refresh()}
+          />
+        ) : null}
+        {tab === 'actions' ? <ActionsPanel activity={activity} plans={plans} reprompts={reprompts} /> : null}
+        {tab === 'tests' ? <TestsPanel /> : null}
+        {tab === 'chats' ? (
+          <ChatsPanel
+            messages={messages}
+            reprompts={reprompts}
+            selectedId={selectedChatId}
+            onSelect={setSelectedChatId}
+          />
+        ) : null}
+      </div>
+
+      {/* ---- Mobile swipeable card stack ---- */}
+      <div className={cn('relative min-h-0 flex-1 overflow-clip', full ? 'hidden' : 'lg:hidden')}>
         <div
           ref={trackRef}
           onScroll={onScroll}
@@ -186,7 +300,12 @@ export function AIOutlookPanel({
       </div>
 
       {/* ---- Pips + arrows ---- */}
-      <div className="relative flex items-center gap-2 border-t border-line px-4 py-2.5">
+      <div
+        className={cn(
+          'relative flex items-center gap-2 border-t border-line px-4 py-2.5',
+          full ? 'hidden' : 'lg:hidden',
+        )}
+      >
         <div className="flex items-center gap-1.5" role="tablist" aria-label="Outlook cards">
           {Array.from({ length: cardCount }).map((_, i) => (
             <button
@@ -221,6 +340,8 @@ export function AIOutlookPanel({
       </div>
 
       <AssistantChatLauncher onChatStart={onChatStart} />
+
+      <AISettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
     </section>
   )
 }
@@ -231,11 +352,15 @@ export function MobileAIInsights({
   valuations,
   loading,
   onRefresh,
+  activity = [],
+  plans = [],
 }: {
   outlook?: PortfolioOutlook
   valuations: PositionValuation[]
   loading?: boolean
   onRefresh?: () => Promise<unknown> | void
+  activity?: ActivityEvent[]
+  plans?: PlannerIdea[]
 }) {
   const [open, setOpen] = useState(false)
   const messageCount = useAssistantChatStore((state) => state.messages.length)
@@ -304,8 +429,11 @@ export function MobileAIInsights({
                   Portfolio insights and StratFolio AI chat
                 </Dialog.Description>
                 <AIOutlookPanel
+                  full
                   outlook={outlook}
                   valuations={valuations}
+                  activity={activity}
+                  plans={plans}
                   className="h-full rounded-[24px] border-brand-400/20 shadow-[0_30px_80px_-28px_rgba(0,0,0,0.98)]"
                   onRefresh={onRefresh}
                   onMinimize={minimize}
@@ -384,11 +512,7 @@ function MarketOutlookCard({
         </button>
       </div>
 
-      <h3 className="hidden text-[24px] leading-tight font-extrabold tracking-[-0.02em] text-brand-300 lg:block">
-        {outlook.stance.split('·')[0].trim()}
-      </h3>
-
-      <h4 className="mt-3.5 hidden border-t border-line pt-3 text-[12.5px] font-bold text-ink lg:block">
+      <h4 className="mt-1 hidden text-[12.5px] font-bold text-ink lg:block">
         Key drivers
       </h4>
       <ul className="space-y-2 lg:mt-2.5">
@@ -419,6 +543,315 @@ function MarketOutlookCard({
 
     </CardShell>
   )
+}
+
+type TimelineItem = {
+  id: string
+  title: string
+  detail: string
+  at: string
+  kind: 'trade' | 'plan' | 'reprompt'
+}
+
+function ActionsPanel({
+  activity,
+  plans,
+  reprompts,
+}: {
+  activity: ActivityEvent[]
+  plans: PlannerIdea[]
+  reprompts: RepromptRecord[]
+}) {
+  const items = useMemo<TimelineItem[]>(() => {
+    const events = activity.map((event) => ({
+      id: event.id,
+      title: event.title,
+      detail: event.detail,
+      at: event.at,
+      kind: 'trade' as const,
+    }))
+    const planEvents = plans.map((plan) => ({
+      id: `plan-${plan.id}`,
+      title: `${plan.symbol} trade plan ${plan.status}`,
+      detail: `${plan.source === 'ai' ? 'AI-created' : 'User-created'} ${plan.intent ?? 'open'} plan · ${plan.title}`,
+      at: plan.createdAt,
+      kind: 'plan' as const,
+    }))
+    const edits = reprompts
+      .filter((record) => record.reference.kind === 'plan')
+      .map((record) => ({
+        id: `action-${record.id}`,
+        title: `${record.reference.label} plan revised`,
+        detail: `AI re-evaluated the plan after: “${record.question}”`,
+        at: record.createdAt,
+        kind: 'reprompt' as const,
+      }))
+    return [...events, ...planEvents, ...edits].sort(byNewest).slice(0, 12)
+  }, [activity, plans, reprompts])
+
+  return (
+    <PanelList empty="No AI or trading actions yet.">
+      {items.map((item) => {
+        const Icon = item.kind === 'trade' ? CheckCircle2 : item.kind === 'plan' ? ClipboardCheck : FilePenLine
+        return (
+          <div key={item.id} className="flex gap-2.5 border-b border-line/70 py-2.5 last:border-0">
+            <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-300">
+              <Icon size={13} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11.5px] leading-snug font-bold text-ink">{item.title}</div>
+              <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-ink-muted">{item.detail}</p>
+              <time className="mt-1 block text-[9px] text-ink-muted/65">{dateTime(item.at)}</time>
+            </div>
+          </div>
+        )
+      })}
+    </PanelList>
+  )
+}
+
+const SIGNIFICANT_TESTS = [
+  {
+    id: 'test-ai-concentration',
+    source: 'AI' as const,
+    title: 'Concentration shock · −18% NVDA',
+    result: 'Portfolio drawdown held to −6.4%; concentration guardrail breached.',
+    at: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'test-user-mu',
+    source: 'User' as const,
+    title: 'MU volatility crush after earnings',
+    result: 'Jan calls retained 61% of modeled value under a 24-point IV contraction.',
+    at: new Date(Date.now() - 5.2 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'test-ai-rates',
+    source: 'AI' as const,
+    title: 'Higher-for-longer rate regime',
+    result: 'Growth sleeve underperformed benchmark by 3.1%; no stop levels triggered.',
+    at: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
+  },
+]
+
+function TestsPanel() {
+  return (
+    <PanelList empty="No significant tests yet.">
+      {SIGNIFICANT_TESTS.map((test) => (
+        <div key={test.id} className="border-b border-line/70 py-2.5 last:border-0">
+          <div className="flex items-start gap-2">
+            <span className={cn(
+              'mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg',
+              test.source === 'AI' ? 'bg-brand-100 text-brand-300' : 'bg-white/[0.06] text-ink-soft',
+            )}>
+              {test.source === 'AI' ? <Bot size={13} /> : <UserRound size={13} />}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11.5px] leading-snug font-bold text-ink">{test.title}</span>
+                <span className="rounded bg-white/[0.06] px-1 py-0.5 text-[8px] font-black tracking-wide text-ink-muted uppercase">
+                  {test.source}
+                </span>
+              </div>
+              <p className="mt-1 text-[10.5px] leading-snug text-ink-muted">{test.result}</p>
+              <time className="mt-1 block text-[9px] text-ink-muted/65">{dateTime(test.at)}</time>
+            </div>
+          </div>
+        </div>
+      ))}
+    </PanelList>
+  )
+}
+
+type ChatSummary = {
+  id: string
+  title: string
+  at: string
+  reference?: RepromptRecord['reference']
+  turns: { role: 'user' | 'assistant'; text: string }[]
+  actions: string[]
+}
+
+const DEMO_CHAT_SUMMARIES: ChatSummary[] = [
+  {
+    id: 'demo-chat-mu',
+    title: 'Should we keep the MU calls through the next earnings cycle?',
+    at: new Date(Date.now() - 2.1 * 60 * 60 * 1000).toISOString(),
+    turns: [
+      { role: 'user', text: 'Should we keep the MU calls through the next earnings cycle?' },
+      { role: 'assistant', text: 'Keep the position, but cap event risk. The calls still have enough duration to absorb one volatility reset, while the current sizing remains inside the portfolio risk budget.' },
+    ],
+    actions: ['Ran an earnings volatility-crush test', 'Kept the plan active with the existing max allocation'],
+  },
+  {
+    id: 'demo-reprompt-wmt',
+    title: 'WMT plan reprompt: prioritize capital preservation',
+    at: new Date(Date.now() - 19 * 60 * 60 * 1000).toISOString(),
+    turns: [
+      { role: 'user', text: 'Rewrite this plan to prioritize capital preservation after the earnings gap.' },
+      { role: 'assistant', text: 'I tightened the invalidation level, reduced the maximum allocation, and changed the entry requirement to wait for confirmation above the post-earnings range.' },
+    ],
+    actions: ['Reduced maximum plan allocation', 'Tightened stop criteria', 'Added post-earnings confirmation requirement'],
+  },
+  {
+    id: 'demo-chat-nvda',
+    title: 'How exposed are we if NVDA drops 15–20%?',
+    at: new Date(Date.now() - 3.2 * 24 * 60 * 60 * 1000).toISOString(),
+    turns: [
+      { role: 'user', text: 'How exposed are we if NVDA drops 15–20%?' },
+      { role: 'assistant', text: 'A modeled 18% NVDA decline produces an estimated 6.4% portfolio drawdown. The largest secondary effect is correlation expansion across the AI-compute sleeve.' },
+    ],
+    actions: ['Ran the NVDA concentration shock test', 'Flagged the concentration guardrail breach'],
+  },
+]
+
+function ChatsPanel({
+  messages,
+  reprompts,
+  selectedId,
+  onSelect,
+}: {
+  messages: AssistantChatMessage[]
+  reprompts: RepromptRecord[]
+  selectedId: string | null
+  onSelect: (id: string | null) => void
+}) {
+  const chats = useMemo(() => buildChatSummaries(messages, reprompts), [messages, reprompts])
+  const selected = chats.find((chat) => chat.id === selectedId)
+
+  if (selected) {
+    return (
+      <div className="no-scrollbar h-full overflow-y-auto px-4 py-3">
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-300 hover:text-brand-200"
+        >
+          <ArrowLeft size={12} /> Back to chats
+        </button>
+        <h3 className="mt-2 text-[12px] font-bold text-ink">{selected.title}</h3>
+        <time className="mt-0.5 block text-[9px] text-ink-muted/65">{dateTime(selected.at)}</time>
+        <div className="mt-3 space-y-2">
+          {selected.turns.map((turn, index) => (
+            <div
+              key={`${turn.role}-${index}`}
+              className={cn(
+                'rounded-xl px-2.5 py-2 text-[10.5px] leading-relaxed',
+                turn.role === 'user' ? 'ml-5 bg-brand-500/15 text-ink' : 'mr-3 bg-white/[0.05] text-ink-soft',
+              )}
+            >
+              <span className="mb-1 block text-[8px] font-black tracking-wide text-ink-muted uppercase">
+                {turn.role === 'user' ? 'You' : 'StratFolio AI'}
+              </span>
+              {turn.text}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 rounded-xl border border-brand-400/20 bg-brand-500/[0.08] p-2.5">
+          <div className="text-[9px] font-black tracking-wide text-brand-300 uppercase">AI actions taken</div>
+          <ul className="mt-1.5 space-y-1">
+            {selected.actions.map((action) => (
+              <li key={action} className="flex gap-1.5 text-[10px] leading-snug text-ink-soft">
+                <CheckCircle2 size={11} className="mt-0.5 shrink-0 text-up" /> {action}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <PanelList empty="Your AI chats and reprompts will appear here.">
+      {chats.map((chat) => (
+        <button
+          key={chat.id}
+          type="button"
+          onClick={() => onSelect(chat.id)}
+          className="flex w-full gap-2.5 border-b border-line/70 py-2.5 text-left last:border-0 hover:bg-white/[0.025]"
+        >
+          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-300">
+            <MessageCircle size={13} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 text-[11px] leading-snug font-bold text-ink">{chat.title}</span>
+            <span className="mt-1 block text-[9px] text-ink-muted/65">{dateTime(chat.at)}</span>
+          </span>
+          <ChevronRight size={13} className="mt-1 shrink-0 text-ink-muted" />
+        </button>
+      ))}
+    </PanelList>
+  )
+}
+
+function PanelList({ children, empty }: { children: React.ReactNode; empty: string }) {
+  const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children)
+  return (
+    <div className="no-scrollbar h-full overflow-y-auto px-4 py-2">
+      {hasChildren ? children : <p className="py-8 text-center text-[11px] text-ink-muted">{empty}</p>}
+    </div>
+  )
+}
+
+function buildChatSummaries(messages: AssistantChatMessage[], reprompts: RepromptRecord[]): ChatSummary[] {
+  const summaries: ChatSummary[] = []
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i]
+    if (message.role !== 'user') continue
+    const answer = messages.slice(i + 1).find((candidate) => candidate.role === 'assistant')
+    summaries.push({
+      id: `chat-${message.id}`,
+      title: message.reference ? `${message.reference.label}: ${message.text}` : message.text,
+      at: message.createdAt ?? timestampFromId(message.id),
+      reference: message.reference,
+      turns: [
+        { role: 'user', text: message.text },
+        ...(answer ? [{ role: 'assistant' as const, text: answer.text }] : []),
+      ],
+      actions: message.reference
+        ? [`Reviewed the linked ${message.reference.kind}`, 'Updated guidance using the user’s constraint']
+        : ['Reviewed current portfolio context', 'Returned an evidence-based recommendation'],
+    })
+  }
+
+  const representedQuestions = new Set(summaries.flatMap((summary) => summary.turns.filter((turn) => turn.role === 'user').map((turn) => turn.text)))
+  for (const record of reprompts) {
+    if (representedQuestions.has(record.question)) continue
+    summaries.push({
+      id: record.id,
+      title: `${record.reference.label}: ${record.question}`,
+      at: record.createdAt,
+      reference: record.reference,
+      turns: [
+        { role: 'user', text: record.question },
+        ...(record.answer ? [{ role: 'assistant' as const, text: record.answer }] : []),
+      ],
+      actions: [
+        `Re-evaluated the linked ${record.reference.kind}`,
+        record.reference.kind === 'plan' ? 'Updated trade-plan guidance' : 'Updated conviction and risk guidance',
+      ],
+    })
+  }
+  const ids = new Set(summaries.map((summary) => summary.id))
+  return [...summaries, ...DEMO_CHAT_SUMMARIES.filter((summary) => !ids.has(summary.id))].sort(byNewest)
+}
+
+function byNewest(a: { at?: string; createdAt?: string }, b: { at?: string; createdAt?: string }) {
+  return new Date(b.at ?? b.createdAt ?? 0).getTime() - new Date(a.at ?? a.createdAt ?? 0).getTime()
+}
+
+function timestampFromId(id: string) {
+  const timestamp = Number(id.split('-').find((part) => /^\d{13}$/.test(part)))
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : new Date().toISOString()
+}
+
+function dateTime(iso: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(iso))
 }
 
 function PositionCommentaryCard({ valuation }: { valuation: PositionValuation }) {

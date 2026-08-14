@@ -267,6 +267,17 @@
     backdrop-filter: none;
     box-shadow: none;
   }
+
+  /* iOS Safari zooms the page when a focused text input computes below 16px.
+     Thesis tile composers stay visually compact, but keep the native mobile
+     focus/keyboard behavior at the browser's no-zoom threshold. */
+  .tile-footer-gloss input,
+  .tile-footer-gloss textarea,
+  textarea[aria-label^='Ask AI about the'],
+  [aria-label='Ask the StratFolio assistant'],
+  [aria-label='Continue assistant chat'] {
+    font-size: 16px !important;
+  }
 }
 
 /* Without backdrop-filter the panels go solid rather than transparent. */
@@ -846,6 +857,22 @@
   animation: study-trace-sweep 4s linear infinite;
 }
 
+.sf-logo-trace {
+  stroke-dasharray: 18 82;
+  animation: sf-logo-trace-sweep 3.2s ease-in-out infinite;
+}
+
+.sf-logo-trace-delayed {
+  animation-delay: 180ms;
+}
+
+@keyframes sf-logo-trace-sweep {
+  0% { stroke-dashoffset: 100; opacity: 0; }
+  12% { opacity: 1; }
+  52% { stroke-dashoffset: 0; opacity: 1; }
+  68%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
 @keyframes study-trace-sweep {
   0% {
     stroke-dashoffset: 100;
@@ -868,7 +895,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .study-trace {
+  .study-trace,
+  .sf-logo-trace {
     animation: none;
     stroke-dasharray: none;
     opacity: 0.45;
@@ -1135,4 +1163,36 @@
 @media (prefers-reduced-motion: reduce) {
   .price-tick-up,
   .price-tick-down { animation: none; }
+}
+
+/* ---------- AI Settings: risk/reward dial ---------- */
+.risk-dial {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #42dda0, #f5c26b 52%, #ff6b7a);
+  outline: none;
+  cursor: pointer;
+}
+.risk-dial::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 999px;
+  background: #fff;
+  border: 3px solid #1d2836;
+  box-shadow: 0 0 0 2px rgba(91, 166, 255, 0.55), 0 6px 14px -6px rgba(0, 0, 0, 0.9);
+  transition: transform 0.15s ease;
+}
+.risk-dial::-webkit-slider-thumb:hover { transform: scale(1.12); }
+.risk-dial::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 999px;
+  background: #fff;
+  border: 3px solid #1d2836;
+  box-shadow: 0 0 0 2px rgba(91, 166, 255, 0.55), 0 6px 14px -6px rgba(0, 0, 0, 0.9);
 }

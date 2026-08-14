@@ -6,6 +6,8 @@ export interface AssistantChatMessage {
   id: string
   role: 'user' | 'assistant'
   text: string
+  /** ISO timestamp; legacy persisted messages may predate this field. */
+  createdAt?: string
   /** The thesis, position or plan this turn was about. */
   reference?: AssistantReference
 }
@@ -27,6 +29,8 @@ interface AssistantChatState {
   sendMessage: (question: string, reference?: AssistantReference) => Promise<void>
   openWindow: () => void
   minimize: () => void
+  /** Wipes the session thread — the chat half of "reset model memory". */
+  clearConversation: () => void
 }
 
 let messageSequence = 0
@@ -43,6 +47,8 @@ export const useAssistantChatStore = create<AssistantChatState>((set, get) => ({
 
   openWindow: () => set({ mode: 'window', unread: false }),
   minimize: () => set({ mode: 'bubble' }),
+  clearConversation: () =>
+    set({ messages: [], mode: 'bubble', thinking: false, unread: false, context: null }),
 
   sendMessage: async (rawQuestion, explicitReference) => {
     const question = rawQuestion.trim()
@@ -59,6 +65,7 @@ export const useAssistantChatStore = create<AssistantChatState>((set, get) => ({
       id: nextMessageId('user'),
       role: 'user',
       text: question,
+      createdAt: new Date().toISOString(),
       reference,
     }
     set((state) => ({
@@ -78,6 +85,7 @@ export const useAssistantChatStore = create<AssistantChatState>((set, get) => ({
             id: nextMessageId('assistant'),
             role: 'assistant',
             text: reply.text,
+            createdAt: new Date().toISOString(),
             reference,
           },
         ],
@@ -93,6 +101,7 @@ export const useAssistantChatStore = create<AssistantChatState>((set, get) => ({
             id: nextMessageId('assistant'),
             role: 'assistant',
             text: 'I could not complete that response. Please try again.',
+            createdAt: new Date().toISOString(),
           },
         ],
         thinking: false,

@@ -439,8 +439,8 @@ export const ALL_POSITIONS: Position[] = [
     symbol: 'MSFT',
     company: 'Microsoft Corp.',
     assetType: 'option',
-    contractDetail: "$470 Call · Dec 18 '26",
-    option: contract('CALL', 470, '2026-12-18', "Dec 18 '26", 15, '2026-10-27', 'Fiscal Q1 print on Oct 27.'),
+    contractDetail: "$520 Call · Dec 18 '26",
+    option: contract('CALL', 520, '2026-12-18', "Dec 18 '26", 15, '2026-10-27', 'Fiscal Q1 print on Oct 27.'),
     brokerageId: 'fidelity',
     quantity: 7,
     avgCost: 12.4,
@@ -511,6 +511,37 @@ function idea(
 }
 
 export const ALL_IDEAS: Idea[] = [
+  // The flagship thesis: highest conviction in the book, so the feed's
+  // conviction sort pins it first for every user. All numbers are keyed to
+  // MSFT at $495 with the $600C Mar 19 '27 marking $17.15.
+  idea('idea-msft-mar', 'MSFT', 'Microsoft Corp.',
+    contract('CALL', 600, '2027-03-19', "Mar 19 '27", 28.28, '2026-10-27', 'Fiscal Q1 prints late October; the contract spans it and the late-January Q2 print with eight weeks of buffer.'), {
+    categories: ['options'], forYou: true, referencePrice: 495,
+    entryLow: 15.9, entryHigh: 18.4, targetLow: 38, targetHigh: 52, expectedUpsidePct: 162.4,
+    catalysts: [
+      'Fiscal Q1 print in late October — Azure growth re-acceleration is the single number that moves the multiple.',
+      'Copilot seat disclosure expected with the late-January print, the largest unmodelled revenue line in consensus.',
+      'AI capex intensity peaks this fiscal year, setting up the free-cash-flow inflection the multiple has not priced.',
+    ],
+    risks: [
+      'A capex-digestion headline from any hyperscaler compresses the whole platform group at once.',
+      'At ~21% OTM the contract needs Azure to genuinely re-accelerate — a merely in-line print bleeds premium.',
+      'Full premium at risk.',
+    ],
+    tags: ['Tech exposure', 'Earnings play'],
+    ai: ai({
+      conviction: 92, convictionDelta: 3, recommendation: 'BUY',
+      upsideTarget: 52, downsideRisk: 0, riskRewardRatio: 3.1,
+      horizon: 'Across next 2 earnings', targetLow: 38, targetHigh: 52,
+      recommendationNote: 'Highest-conviction thesis on the desk. Scale in across the $15.90–$18.40 band ahead of the late-October print.',
+      thesis: [
+        'The book screens underweight core tech: heavy semi-cyclical beta, no mega-cap platform compounder. MSFT is the cleanest single-name fix — Azure AI consumption is compounding north of 30% with Copilot converting the installed base into annuity revenue, at roughly half the realised vol of the semis sleeve.',
+        'Highest conviction in the model at 92/100. Scale in thirds across the entry band over the next four weeks, then hold across the next two earnings prints (late Oct, late Jan) — the March expiry leaves eight weeks of post-print buffer.',
+        'Structure: the $600 strike sits ~21% OTM with breakeven at $617.15 on the $17.15 mid. Max loss capped at premium; $38–$52 target band on the flip.',
+      ],
+      updatedAt: hoursAgo(1),
+    }),
+  }),
   idea('idea-sndk-nov', 'SNDK', 'SanDisk Corp.',
     contract('CALL', 135, '2026-11-20', "Nov 20 '26", 11.2, '2026-10-29', 'Fiscal Q1 print on Oct 29, 22 days before expiry.'), {
     categories: ['options'], forYou: true, referencePrice: 118.4,
@@ -526,7 +557,7 @@ export const ALL_IDEAS: Idea[] = [
       'Domestic Chinese NAND moving up-node faster than expected would make the substitute fear real rather than overshot.',
       'Full premium at risk — defined-loss by construction.',
     ],
-    tags: ['Memory', 'Forced seller'],
+    tags: ['Rebound play', 'Memory exposure'],
     ai: ai({
       conviction: 87, convictionDelta: 6, recommendation: 'BUY',
       upsideTarget: 26, downsideRisk: 0, riskRewardRatio: 2.9,
@@ -555,7 +586,7 @@ export const ALL_IDEAS: Idea[] = [
       'A second wave of Korean liquidation would extend the drawdown past this entry.',
       'Full premium at risk.',
     ],
-    tags: ['Memory', 'HBM'],
+    tags: ['Earnings play', 'AI exposure'],
     ai: ai({
       conviction: 84, convictionDelta: 5, recommendation: 'BUY',
       upsideTarget: 31, downsideRisk: 0, riskRewardRatio: 3,
@@ -584,7 +615,7 @@ export const ALL_IDEAS: Idea[] = [
       'Capex digestion at one large hyperscaler would hit orders immediately.',
       'Full premium at risk.',
     ],
-    tags: ['Storage', 'AI infrastructure'],
+    tags: ['Mispricing play', 'Storage exposure'],
     ai: ai({
       conviction: 76, convictionDelta: 4, recommendation: 'BUY',
       upsideTarget: 20, downsideRisk: 0, riskRewardRatio: 2.7,
@@ -612,7 +643,7 @@ export const ALL_IDEAS: Idea[] = [
       'Execution risk on scaling manufacturing to meet the backlog.',
       'Full premium at risk.',
     ],
-    tags: ['Power & thermal', 'AGI capex'],
+    tags: ['Infra exposure', 'Two-print play'],
     ai: ai({
       conviction: 81, convictionDelta: 4, recommendation: 'BUY',
       upsideTarget: 38, downsideRisk: 0, riskRewardRatio: 2.8,
@@ -639,7 +670,7 @@ export const ALL_IDEAS: Idea[] = [
       'A capex digestion signal from any hyperscaler hits this name hardest.',
       'Full premium at risk.',
     ],
-    tags: ['Custom silicon', 'Crowded'],
+    tags: ['Momentum play', 'Crowded trade'],
     ai: ai({
       conviction: 73, convictionDelta: 1, recommendation: 'BUY',
       upsideTarget: 62, downsideRisk: 0, riskRewardRatio: 2.5,
@@ -666,7 +697,7 @@ export const ALL_IDEAS: Idea[] = [
       'Single-customer concentration is severe.',
       'Full premium at risk on a high-beta name.',
     ],
-    tags: ['Connectivity', 'High beta'],
+    tags: ['Positioning play', 'High beta'],
     ai: ai({
       conviction: 58, convictionDelta: -2, recommendation: 'HOLD',
       upsideTarget: 14, downsideRisk: 0, riskRewardRatio: 2.1,
@@ -693,7 +724,7 @@ export const ALL_IDEAS: Idea[] = [
       'Customer concentration: the two largest customers are roughly a third of revenue.',
       'Full premium at risk.',
     ],
-    tags: ['Foundry', 'Monopoly'],
+    tags: ['Earnings play', 'Pricing power'],
     ai: ai({
       conviction: 89, convictionDelta: 5, recommendation: 'BUY',
       upsideTarget: 36, downsideRisk: 0, riskRewardRatio: 2.9,
@@ -720,7 +751,7 @@ export const ALL_IDEAS: Idea[] = [
       'Lumpy revenue recognition makes any single quarter a poor signal.',
       'Full premium at risk on a high-notional contract.',
     ],
-    tags: ['Semi-cap', 'Monopoly'],
+    tags: ['Bookings play', 'Semi exposure'],
     ai: ai({
       conviction: 78, convictionDelta: 2, recommendation: 'BUY',
       upsideTarget: 124, downsideRisk: 0, riskRewardRatio: 2.4,
@@ -747,7 +778,7 @@ export const ALL_IDEAS: Idea[] = [
       'Licensing revenue is lumpy and can miss badly in any single quarter.',
       'Full premium at risk.',
     ],
-    tags: ['IP royalties', 'Datacenter CPU'],
+    tags: ['Royalty play', 'Pullback entry'],
     ai: ai({
       conviction: 66, convictionDelta: 0, recommendation: 'HOLD',
       upsideTarget: 28, downsideRisk: 0, riskRewardRatio: 2.2,
@@ -772,7 +803,7 @@ export const ALL_IDEAS: Idea[] = [
       'A crypto melt-up restores volumes and invalidates the setup quickly.',
       'Full premium at risk.',
     ],
-    tags: ['Hedge', 'Divergence'],
+    tags: ['Hedge play', 'Mean reversion'],
     ai: ai({
       conviction: 57, convictionDelta: -1, recommendation: 'HOLD',
       upsideTarget: 34, downsideRisk: 0, riskRewardRatio: 2.1,
@@ -798,7 +829,7 @@ export const ALL_IDEAS: Idea[] = [
       'The least volatile underlying in the sleeve, so the contract needs a real move to pay.',
       'Full premium at risk.',
     ],
-    tags: ['Utilities', 'AI power demand'],
+    tags: ['Power play', 'Low beta'],
     ai: ai({
       conviction: 69, convictionDelta: 4, recommendation: 'BUY',
       upsideTarget: 12, downsideRisk: 0, riskRewardRatio: 1.9,
@@ -825,7 +856,7 @@ export const ALL_IDEAS: Idea[] = [
       'Consumer-facing and therefore macro-sensitive in a way the semis sleeve is not.',
       'Full premium at risk.',
     ],
-    tags: ['Platform', 'FCF inflection'],
+    tags: ['Re-rate play', 'Consumer exposure'],
     ai: ai({
       conviction: 72, convictionDelta: 3, recommendation: 'BUY',
       upsideTarget: 16, downsideRisk: 0, riskRewardRatio: 2.3,

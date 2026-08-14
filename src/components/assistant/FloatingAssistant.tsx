@@ -5,6 +5,8 @@ import { ChevronRight, MessageCircle, Minus, SendHorizonal } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 import { AssistantAvatar } from '@/components/assistant/AssistantAvatar'
+import { MobileAssistantSheet } from '@/components/assistant/MobileAssistantSheet'
+import { useIsMobile } from '@/hooks/useMediaQuery'
 import type { AssistantReference } from '@/store/repromptStore'
 
 /** Settings owns the whole screen; the bubble would sit on top of its rows. */
@@ -20,7 +22,9 @@ export function FloatingAssistant() {
   const unread = useAssistantChatStore((s) => s.unread)
   const [value, setValue] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { pathname } = useLocation()
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight, behavior: 'smooth' })
@@ -37,9 +41,21 @@ export function FloatingAssistant() {
     void sendMessage(question)
   }
 
+  const handleMinimize = () => {
+    // Blur before unmounting the fixed chat panel. On iOS this prevents the
+    // keyboard focus state from leaving the visual viewport zoomed in.
+    inputRef.current?.blur()
+    ;(document.activeElement as HTMLElement | null)?.blur?.()
+    minimize()
+  }
+
   return (
     <AnimatePresence mode="wait" initial={false}>
-      {mode === 'window' ? (
+      {mode === 'window' && isMobile ? (
+        // Mobile parity: a tapped chat bubble opens the same StratFolio AI
+        // box desktop shows — tabs, contents and AI settings included.
+        <MobileAssistantSheet key="assistant-sheet" onMinimize={handleMinimize} />
+      ) : mode === 'window' ? (
         <motion.section
           key="assistant-window"
           initial={{ opacity: 0, y: 18, scale: 0.96 }}
@@ -60,7 +76,7 @@ export function FloatingAssistant() {
             </div>
             <button
               type="button"
-              onClick={minimize}
+              onClick={handleMinimize}
               aria-label="Minimize assistant chat"
               className="grid h-8 w-8 place-items-center rounded-full text-ink-muted transition-colors hover:bg-white/[0.07] hover:text-ink"
             >
@@ -106,11 +122,12 @@ export function FloatingAssistant() {
           <form onSubmit={submit} className="border-t border-line p-3">
             <div className="flex items-center gap-2 rounded-2xl border border-line bg-white/[0.04] p-1.5 pl-3 focus-within:border-brand-500/50">
               <input
+                ref={inputRef}
                 value={value}
                 onChange={(event) => setValue(event.target.value)}
                 placeholder="Ask a follow-up…"
                 aria-label="Continue assistant chat"
-                className="h-8 min-w-0 flex-1 bg-transparent text-[12.5px] text-ink placeholder:text-ink-muted focus:outline-none"
+                className="h-8 min-w-0 flex-1 bg-transparent text-[16px] text-ink placeholder:text-ink-muted focus:outline-none sm:text-[12.5px]"
               />
               <button
                 type="submit"

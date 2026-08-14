@@ -43,6 +43,8 @@ const BY_SYMBOL: Record<string, string> = {
     'The Vertiv Feb 19 $195 calls are the diversifying leg — 14 contracts at $9.30. Power and thermal is the physical bottleneck on the AGI buildout, and this is the one contract in the sleeve that does not trade with the Korean liquidation flow. Two prints inside one premium. Trim a third above $28 and carry the balance to the February guide.',
   AMD:
     'The AMD Oct 16 $185 calls are a structural error rather than a thesis error: that expiry falls eleven days before the Oct 27 print that would deliver the MI400 catalyst. You are holding a catalyst trade that expires before the catalyst. Roll out to January. Implied volatility is in the 38th percentile so the roll is not expensive.',
+  MSFT:
+    'The MSFT $600C Mar 19 ’27 is the highest-conviction thesis on the desk at 92/100. With the stock at ~$495 the strike sits about 21% out of the money and the contract marks near $17.15, so breakeven is $617.15 at the mid. The play is the tech-exposure gap in the book: heavy semi-cyclical beta, no mega-cap platform compounder. Scale in across the $15.90–$18.40 band, hold across the next two prints (late Oct, late Jan), and the $38–$52 target band is where the flip pays. Azure re-acceleration is the number that decides it.',
 }
 
 const GENERIC: Record<Intent, string> = {
@@ -73,6 +75,22 @@ export class MockAssistantApi implements AssistantApi {
     // Deliberately slow enough that the typing indicator is visible.
     await latency(1400)
     const { intent, symbol } = classify(question)
+
+    // "I like tech but not MSFT" — the one piece of feedback the demo script
+    // leans on, so it gets a purpose-built acknowledgement ahead of the
+    // generic symbol answers.
+    const q = question.toLowerCase()
+    if (
+      /\bmsft\b|\bmicrosoft\b/.test(q) &&
+      /\btech\b/.test(q) &&
+      /\b(not|don'?t|dont|no|but|pass|dislike|hate|avoid|without)\b/.test(q)
+    ) {
+      return {
+        text: "Got it! I'll draft up a similar thesis on another high-conviction tech stock — and I'll hold off on including MSFT in trade plans until we see real traction in Azure.",
+        intent: 'thesis-check',
+        symbol: 'MSFT',
+      }
+    }
 
     if (symbol && BY_SYMBOL[symbol]) {
       return { text: BY_SYMBOL[symbol], intent, symbol }

@@ -1,5 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, ChevronDown, Layers3 } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Layers3 } from 'lucide-react'
+import { cn } from '@/lib/cn'
 import { Pill } from '@/components/shared/Pill'
 import { BROKERAGES } from '@/data/brokerages'
 import { useUiStore } from '@/store/uiStore'
@@ -99,6 +100,110 @@ export function BrokerageSelector({ counts }: { counts: Record<string, number> }
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+  )
+}
+
+/** Desktop sidebar picker: a compact summary that opens into a tall rail to its right. */
+export function SidebarBrokerageSelector({ counts }: { counts: Record<string, number> }) {
+  const value = useUiStore((state) => state.brokerageFilter)
+  const setValue = useUiStore((state) => state.setBrokerageFilter)
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0)
+  const current = value === 'all' ? undefined : BROKERAGES.find((brokerage) => brokerage.id === value)
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
+        aria-label={`Brokerage filter: ${current?.name ?? 'All Brokerages'}`}
+        className="glass group flex w-full items-center gap-3 rounded-[18px] p-3.5 text-left transition-[border-color,background-color] hover:border-brand-400/30 hover:bg-white/[0.055]"
+      >
+        {current ? (
+          <BrokerageLogo id={current.id} size="md" />
+        ) : (
+          <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-brand-500/15 text-brand-300">
+            <Layers3 size={16} />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-bold tracking-[0.08em] text-ink-muted uppercase">
+            Brokerage
+          </span>
+          <span className="mt-0.5 block truncate text-[13px] font-bold text-ink">
+            {current?.short ?? 'All Brokerages'}
+          </span>
+          <span className="block text-[10.5px] text-ink-muted">
+            {current ? `${counts[current.id] ?? 0} open positions` : `${total} open positions`}
+          </span>
+        </span>
+        <ChevronRight size={16} className="shrink-0 text-ink-muted transition-transform group-data-[state=open]:rotate-180" />
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          side="right"
+          align="end"
+          sideOffset={12}
+          collisionPadding={12}
+          className="menu-surface no-scrollbar z-[70] max-h-[calc(100vh-24px)] w-[228px] overflow-y-auto p-1.5"
+        >
+          <DropdownMenu.Label className="px-2.5 pt-2 pb-1.5 text-[9.5px] font-bold tracking-[0.08em] text-ink-muted uppercase">
+            Select brokerage
+          </DropdownMenu.Label>
+          <SidebarBrokerageItem
+            active={value === 'all'}
+            label="All Brokerages"
+            detail={`${total} open positions`}
+            icon={
+              <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-brand-500/12 text-brand-300">
+                <Layers3 size={14} />
+              </span>
+            }
+            onSelect={() => setValue('all')}
+          />
+          <DropdownMenu.Separator className="my-1.5 h-px bg-line" />
+          {BROKERAGES.map((brokerage) => (
+            <SidebarBrokerageItem
+              key={brokerage.id}
+              active={value === brokerage.id}
+              label={brokerage.short}
+              detail={`${brokerage.accountMask} · ${counts[brokerage.id] ?? 0} positions`}
+              icon={<BrokerageLogo id={brokerage.id} size="md" />}
+              onSelect={() => setValue(brokerage.id)}
+            />
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  )
+}
+
+function SidebarBrokerageItem({
+  active,
+  label,
+  detail,
+  icon,
+  onSelect,
+}: {
+  active: boolean
+  label: string
+  detail: string
+  icon: React.ReactNode
+  onSelect: () => void
+}) {
+  return (
+    <DropdownMenu.Item
+      onSelect={onSelect}
+      className={cn(
+        'flex cursor-default items-center gap-2.5 rounded-xl px-2.5 py-2.5 outline-none transition-colors',
+        active ? 'bg-brand-500/15' : 'hover:bg-white/[0.055] focus:bg-white/[0.055]',
+      )}
+    >
+      {icon}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[12px] font-bold text-ink">{label}</span>
+        <span className="block truncate text-[9.5px] text-ink-muted">{detail}</span>
+      </span>
+      {active ? <Check size={13} className="shrink-0 text-brand-300" strokeWidth={2.7} /> : null}
+    </DropdownMenu.Item>
   )
 }
 

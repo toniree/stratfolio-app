@@ -34,15 +34,15 @@ export function PortfolioValueWidget({
       onClick={onToggle}
       aria-expanded={expanded}
       className={cn(
-        'card relative overflow-hidden rounded-[22px] p-3.5 text-left transition-[border-color,background-color,box-shadow,transform] sm:p-4',
+        'card relative overflow-hidden rounded-[22px] p-3.5 text-left transition-[border-color,background-color,box-shadow,transform]',
         expanded ? 'border-brand-500/40 bg-brand-50' : 'hover:bg-white/[0.06]',
       )}
     >
-      <div className="flex items-center gap-2">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-300 sm:h-7 sm:w-7">
+      <div className="flex items-center gap-1.5">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-300">
           <Wallet2 size={13} />
         </span>
-        <span className="truncate text-[11.5px] font-semibold text-ink-soft sm:text-[12.5px]">Portfolio value</span>
+        <span className="truncate text-[11.5px] font-semibold text-ink-soft">Portfolio value</span>
         <ChevronDown
           size={14}
           className={cn(
@@ -52,14 +52,14 @@ export function PortfolioValueWidget({
         />
       </div>
 
-      <div className="mt-2.5 flex items-end justify-between gap-2">
+      <div className="mt-2 flex items-end justify-between gap-1.5">
         <div className="min-w-0">
-          <div className="num text-[20px] leading-none font-extrabold tracking-[-0.03em] whitespace-nowrap text-ink sm:text-[23px]">
+          <div className="num text-[20px] leading-none font-extrabold tracking-[-0.03em] whitespace-nowrap text-ink xl:text-[22px]">
             {formatMoney(marketValue)}
           </div>
           <div
             className={cn(
-              'num mt-2 truncate text-[12px] font-semibold',
+              'num mt-1.5 truncate text-[11.5px] font-semibold',
               up ? 'text-up' : 'text-down',
             )}
           >
@@ -67,12 +67,12 @@ export function PortfolioValueWidget({
             <span className="hidden font-medium text-ink-muted sm:inline"> today</span>
           </div>
         </div>
-        <span className="liquid-inset shrink-0 rounded-xl px-1.5 py-1">
+        <span className="liquid-inset shrink-0 rounded-xl px-1 py-0.5">
           <Sparkline
             data={spark}
             tone={up ? 'up' : 'down'}
-            width={56}
-            height={28}
+            width={48}
+            height={26}
           />
         </span>
       </div>

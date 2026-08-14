@@ -79,17 +79,19 @@ export function AITradingControl({
         aria-label={`AI Trading ${enabled ? 'on' : 'off'}`}
         onClick={toggle}
         className={cn(
-          'group w-full rounded-2xl p-3 text-left transition-[background-color,border-color,transform] active:scale-[0.99]',
+          'group w-full text-left transition-[background-color,border-color,transform] active:scale-[0.99]',
+          variant === 'rail' ? 'rounded-[14px] p-2.5' : 'rounded-2xl p-3',
           onChrome
             ? 'border border-white/20 bg-white/12 hover:bg-white/18'
             : 'border border-line bg-surface hover:border-brand-400/30 hover:bg-white/[0.045]',
           variant === 'row' && 'rounded-xl',
         )}
       >
-        <div className="flex items-start gap-2.5">
+        <div className={cn('flex gap-2.5', variant === 'rail' ? 'items-center' : 'items-start')}>
           <span
             className={cn(
-              'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-[background-color,box-shadow]',
+              'grid shrink-0 place-items-center rounded-lg transition-[background-color,box-shadow]',
+              variant === 'rail' ? 'h-7 w-7' : 'h-8 w-8',
               enabled
                 ? 'bg-emerald-300/18 text-emerald-200 shadow-[0_0_14px_-8px_rgba(47,255,163,0.8)]'
                 : onChrome
@@ -98,13 +100,14 @@ export function AITradingControl({
             )}
             aria-hidden
           >
-            <BotMessageSquare size={16} />
+            <BotMessageSquare size={variant === 'rail' ? 14 : 16} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span
                 className={cn(
-                  'text-[13.5px] leading-none font-bold',
+                  'leading-none font-bold whitespace-nowrap',
+                  variant === 'rail' ? 'text-[12.5px]' : 'text-[13.5px]',
                   onChrome ? 'text-white' : 'text-ink',
                 )}
               >
@@ -112,7 +115,8 @@ export function AITradingControl({
               </span>
               <span
                 className={cn(
-                  'rounded-full px-1.5 py-px text-[8.5px] font-bold tracking-[0.05em] uppercase',
+                  'rounded-full py-px font-bold tracking-[0.05em] whitespace-nowrap uppercase',
+                  variant === 'rail' ? 'px-1 text-[7.5px]' : 'px-1.5 text-[8.5px]',
                   enabled
                     ? 'bg-emerald-300/16 text-emerald-200'
                     : onChrome
@@ -123,21 +127,24 @@ export function AITradingControl({
                 {enabled ? 'All plans' : 'Your plans'}
               </span>
             </div>
-            <p
-              className={cn(
-                'mt-1 text-[10.5px] leading-snug',
-                onChrome ? 'text-white/70' : 'text-ink-muted',
-              )}
-            >
-              {enabled
-                ? 'AI and user plans execute automatically at their triggers.'
-                : 'Only plans you created by hand or explicitly approved will execute automatically.'}
-            </p>
+            {variant === 'row' ? (
+              <p
+                className={cn(
+                  'mt-1 text-[10.5px] leading-snug',
+                  onChrome ? 'text-white/70' : 'text-ink-muted',
+                )}
+              >
+                {enabled
+                  ? 'AI and user plans execute automatically at their triggers.'
+                  : 'Only plans you created by hand or explicitly approved will execute automatically.'}
+              </p>
+            ) : null}
           </div>
 
           <span
             className={cn(
-              'relative mt-0.5 h-5 w-9 shrink-0 overflow-hidden rounded-full border transition-[background-color,border-color,box-shadow]',
+              'relative shrink-0 overflow-hidden rounded-full border transition-[background-color,border-color,box-shadow]',
+              variant === 'rail' ? 'h-4 w-7' : 'mt-0.5 h-5 w-9',
               enabled
                 ? 'border-emerald-300/55 bg-emerald-300/30 shadow-[0_0_12px_-5px_rgba(47,255,163,0.9)]'
                 : 'border-line-strong bg-white/[0.08]',
@@ -146,8 +153,11 @@ export function AITradingControl({
           >
             <span
               className={cn(
-                'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-[left] duration-200',
-                enabled ? 'left-[17px]' : 'left-0.5',
+                'absolute top-0.5 rounded-full bg-white shadow-sm transition-[left] duration-200',
+                variant === 'rail' ? 'h-3 w-3' : 'h-4 w-4',
+                enabled
+                  ? variant === 'rail' ? 'left-[13px]' : 'left-[17px]'
+                  : 'left-0.5',
               )}
             />
           </span>

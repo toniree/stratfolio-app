@@ -20,9 +20,11 @@ import type { PositionValuation } from '@/lib/portfolioMath'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
-import { planIntent, watchedPlanOptions } from '@/lib/planIntent'
+import { planExitSummary, planIntent, watchedPlanOptions } from '@/lib/planIntent'
+import { PlanCriteriaList } from '@/components/plan/PlanCriteriaList'
 import { Modal } from '@/components/ui/Modal'
 import { usePlanExecutionStore } from '@/store/planExecutionStore'
+import { useUiStore } from '@/store/uiStore'
 import { PlanStopwatchIcon } from '@/components/plan/PlanStopwatchIcon'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 
@@ -41,6 +43,7 @@ export function UpcomingTradePlans({
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showAllPlans, setShowAllPlans] = useState(false)
+  const aiTradingEnabled = useUiStore((state) => state.aiTradingEnabled)
   const [executionId, setExecutionId] = useState<string | null>(null)
   const disabledIds = usePlanExecutionStore((state) => state.disabledIds)
   const disablePlan = usePlanExecutionStore((state) => state.disablePlan)
@@ -138,7 +141,11 @@ export function UpcomingTradePlans({
             const maxAmount = planMaxAmount(plan, portfolioValue, index, valuation)
             const watchedOptions = watchedPlanOptions(plan)
             const disabled = disabledIds.includes(plan.id)
+            // AI Trading only governs AI-authored automation. User-authored
+            // plans remain active when the global AI toggle is off.
+            const inert = disabled || (!aiTradingEnabled && !userMade)
             const lastPrompt = plan.originalPrompt ?? plan.title
+            const exit = planExitSummary(plan, valuation?.marketValue ?? maxAmount)
 
             return (
               <article
@@ -193,14 +200,14 @@ export function UpcomingTradePlans({
                     <span
                       className={cn(
                         'mt-0.5 block truncate text-[10px] font-semibold text-white/78',
-                        disabled && 'text-white/42 line-through decoration-down/75',
+                        inert && 'text-white/42 line-through decoration-down/75',
                       )}
                     >
                       {plan.originalPrompt || plan.title}
                     </span>
                   </span>
 
-                  <span className="flex items-center gap-1.5">
+                  <span className={cn('flex items-center gap-1.5', inert && 'opacity-40 grayscale')}>
                     {disabled ? (
                       <span className="text-[8.5px] font-bold whitespace-nowrap text-down/80 uppercase">
                         Disabled
@@ -255,12 +262,22 @@ export function UpcomingTradePlans({
                       </div>
                     ) : null}
                     <div className="col-span-3 border-t border-white/[0.075] px-3 py-2.5">
+                      <PlanCriteriaList plan={plan} dimmed={inert} />
+                    </div>
+                    <div className="col-span-3 border-t border-white/[0.075] px-3 py-2.5">
                       <div className="text-[8px] font-extrabold tracking-[0.07em] text-white uppercase">
-                        AI Description
+                        Exit plan
                       </div>
-                      <p className="mt-1 text-[9.5px] leading-relaxed text-white/85">
-                        {plan.notes || plan.ai?.recommendationNote || 'Monitoring entry criteria.'}
-                      </p>
+                      <dl className="mt-1.5 grid grid-cols-4 gap-2">
+                        <ExitFact label="Exit range" value={exit.range} tone="up" />
+                        <ExitFact
+                          label="Est. P/L"
+                          value={`${formatSignedMoney(exit.plLow)} to ${formatSignedMoney(exit.plHigh)}`}
+                          tone={exit.plLow >= 0 ? 'up' : 'down'}
+                        />
+                        <ExitFact label="Risk/reward" value={exit.ratio} />
+                        <ExitFact label="Time range" value={exit.time} />
+                      </dl>
                     </div>
                     <div className="col-span-3 border-t border-white/[0.075] px-3 pt-1.5 pb-2.5">
                       {/* Identical mechanism to the position tile's Active Plans
@@ -669,6 +686,32 @@ function planMaxAmount(
   const configured = plan.maxAmount && plan.maxAmount > 0 ? plan.maxAmount : portfolioLimit || 1000
   const sized = portfolioLimit > 0 ? Math.min(configured, portfolioLimit) : configured
   return valuation ? Math.min(sized, Math.max(250, valuation.marketValue)) : sized
+}
+
+/** One cell of the exit-plan strip: label above, wrapped value below. */
+function ExitFact({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone?: 'up' | 'down'
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[7px] font-bold tracking-[0.06em] text-ink-muted uppercase">{label}</dt>
+      <dd
+        className={cn(
+          'num mt-0.5 text-[9px] leading-snug font-extrabold break-words text-ink',
+          tone === 'up' && 'text-up',
+          tone === 'down' && 'text-down',
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  )
 }
 
 function PlanPreviewFact({ label, value }: { label: string; value: string }) {

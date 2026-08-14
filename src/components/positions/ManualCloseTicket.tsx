@@ -36,6 +36,8 @@ export function ManualCloseTicket({
   const [selectedQuote, setSelectedQuote] = useState<string | null>(null)
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null)
   const submitOrder = useSubmitOrder()
+  const onOpenChangeRef = useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
 
   const priceAtOpen = useRef(price)
   priceAtOpen.current = price
@@ -64,9 +66,9 @@ export function ManualCloseTicket({
 
   useEffect(() => {
     if (!submittedOrder) return
-    const timeout = window.setTimeout(() => onOpenChange(false), 2500)
+    const timeout = window.setTimeout(() => onOpenChangeRef.current(false), 2500)
     return () => window.clearTimeout(timeout)
-  }, [submittedOrder, onOpenChange])
+  }, [submittedOrder])
 
   const quantity = useMemo(() => {
     const parsed = Number(quantityText)
