@@ -20,7 +20,9 @@ import {
   type PltSilentTrade,
   type PltTradePlan,
 } from '@/api/http/wire/plt'
+import type { BktExecutionOutcome, BktExecutionRequest } from '@/api/http/wire/bkt'
 import { decimal } from '@/api/http/wire/scalars'
+import { newIdempotencyKey } from '@/api/http/idempotency'
 import {
   mergeOrders,
   toAccount,
@@ -29,6 +31,11 @@ import {
   toPosition,
   toSettledEquitySeries,
 } from '@/api/http/adapters/portfolio'
+import {
+  toCreateTradePlanRequest,
+  toOrderFromExecution,
+  toOrderFromRejection,
+} from '@/api/http/adapters/execution'
 
 /**
  * The live portfolio domain, over service-plt.
@@ -163,19 +170,96 @@ export class HttpPortfolioApi implements PortfolioApi {
     )
   }
 
-  async submitOrder(_request: OrderRequest): Promise<Order> {
-    this.unavailable(
-      'submitOrder',
-      'APP-112',
-      'Order submission needs live chain contract identity (Wave B0) and the pinned plan → execution path; it lands in Wave B.',
-    )
+  /**
+   * Open a silent option position: plt plan → bkt execution (APP-112).
+   *
+   * Returns an `Order` for every *outcome* — `FILLED`, the equally successful
+   * `NO_FILL`, and the `REJECTED` that plt's 422 represents — and throws only
+   * when the operation's fate is genuinely unknown (transport, 5xx, a bkt
+   * 503 that recorded nothing). That split is what the ticket's key discipline
+   * rests on: an outcome means "try again" is a *new* operation and mints a new
+   * key, while a thrown `ApiError` means retry the *same* operation with the
+   * same key and let the servers replay what they recorded (D6).
+   *
+   * Closing is refused outright. plt's `/close` wants real fill facts and no
+   * user-initiated exit route exists (HKP-BKT-1); BKT-018 is building one and
+   * wiring it is a separate task.
+   */
+  async submitOrder(orderRequest: OrderRequest): Promise<Order> {
+    if (orderRequest.intent === 'close' || orderRequest.side === 'SELL') {
+      this.unavailable(
+        'submitOrder(close)',
+        'HKP-BKT-1',
+        'Closing a position needs a user-initiated exit route. plt’s /close records a fill that already happened, and a ticket must never supply an estimated one.',
+      )
+    }
+    if (!orderRequest.contract) {
+      this.unavailable(
+        'submitOrder(open)',
+        'APP-112',
+        'An option order needs full contract identity selected from the live chain — bkt refuses a plan whose contract it cannot re-resolve.',
+      )
+    }
+
+    const submittedAt = new Date().toISOString()
+    // One key for one logical user operation, at both services. plt takes it
+    // as a header and bkt in the body (§7.7); the *string* is deliberately the
+    // same so a single operation is one line in both audit trails.
+    const key = orderRequest.idempotencyKey ?? newIdempotencyKey('open')
+
+    let plan: PltTradePlan
+    try {
+      plan = await request<PltTradePlan>('plt', '/api/v1/trade-plans', {
+        method: 'POST',
+        body: toCreateTradePlanRequest(orderRequest),
+        idempotencyKey: key,
+      })
+    } catch (error) {
+      // 422 is a returned verdict, not a failure: plt persisted the plan as
+      // REJECTED and every replay of this key answers the same 422.
+      if (error instanceof ApiError && error.isRejection) {
+        const rejected = toOrderFromRejection(error, orderRequest, submittedAt)
+        if (rejected.sessionOnly) this.retainSessionOutcome(rejected)
+        return rejected
+      }
+      throw error
+    }
+
+    let outcome: BktExecutionOutcome
+    try {
+      outcome = await request<BktExecutionOutcome>('bkt', '/api/v1/executions', {
+        method: 'POST',
+        // bkt's idempotency is a **body** field. Sending an embedded plan is a
+        // 422 (`EMBEDDED_PLAN_FORBIDDEN`) — bkt reads the plan from plt.
+        body: {
+          trade_plan_id: plan.id,
+          idempotency_key: key,
+          decision_episode_id: plan.decision_episode_id,
+        } satisfies BktExecutionRequest,
+      })
+    } catch (error) {
+      if (error instanceof ApiError && error.isRejection) {
+        const rejected = toOrderFromRejection(error, orderRequest, submittedAt)
+        return { ...rejected, tradePlanId: plan.id, id: plan.id, sessionOnly: false }
+      }
+      // The plan is durable and the execution attempt's fate is unknown. The
+      // caller retries the same operation with the same key; bkt replays.
+      throw error
+    }
+
+    const order = toOrderFromExecution(outcome, orderRequest, submittedAt)
+    // A NO_FILL, or a fill plt never heard about, exists nowhere else
+    // (HKP-BKT-4) — keep it for the session or order history forgets the user
+    // ever attempted the trade.
+    if (order.sessionOnly) this.retainSessionOutcome(order)
+    return order
   }
 
   async addPositionFromIdea(): Promise<Position> {
     this.unavailable(
       'addPositionFromIdea',
       'APP-112',
-      'Opening a position from an idea goes through the same plan → execution path as the ticket; it lands in Wave B.',
+      'Opening from a thesis goes through the same plan → execution path, but a thesis records no contract: the ticket selects one from the live chain first.',
     )
   }
 }

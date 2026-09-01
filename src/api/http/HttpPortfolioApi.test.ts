@@ -3,7 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { HttpPortfolioApi } from '@/api/http/HttpPortfolioApi'
 import { ApiError } from '@/api/http/problem'
 import { PLT_LIST_LIMIT_MAX } from '@/api/http/wire/plt'
-import { SILENT_TRADE_CLOSED_FIXTURE } from '@/test/msw/fixtures/plt'
+import {
+  EXECUTION_FILLED_FIXTURE,
+  EXECUTION_NO_FILL_FIXTURE,
+  EXECUTION_PLATFORM_ERROR_FIXTURE,
+  POLICY_REJECTION_PROBLEM,
+  SILENT_TRADE_CLOSED_FIXTURE,
+  TRADE_PLAN_VALIDATED_FIXTURE,
+} from '@/test/msw/fixtures/plt'
+import type { OrderRequest } from '@/api/types'
 import { server, useMswServer } from '@/test/msw/server'
 
 useMswServer()
@@ -138,5 +146,137 @@ describe('HttpPortfolioApi', () => {
       const api = new HttpPortfolioApi()
       expect(api.submitOrder({} as never)).rejects.toBeInstanceOf(ApiError)
     })
+  })
+})
+
+/* ------------------------------------------------- the open path (APP-112) -- */
+
+const OPEN: OrderRequest = {
+  symbol: 'nvda',
+  side: 'BUY',
+  intent: 'open',
+  quantity: 4,
+  estimatedPrice: 15.8,
+  contract: {
+    occSymbol: 'NVDA261218C00190000',
+    right: 'CALL',
+    strike: 190,
+    expiry: '2026-12-18',
+    dte: 109,
+    mid: 15.8,
+    underlyingPrice: 178.4,
+  },
+  idempotencyKey: 'open-fixed-key',
+}
+
+describe('HttpPortfolioApi.submitOrder — open', () => {
+  it('posts a plan then an execution, with the key in the right place each time', async () => {
+    let planHeader: string | null = null
+    let planBody: Record<string, unknown> = {}
+    let execBody: Record<string, unknown> = {}
+    server.use(
+      http.post('/plt/api/v1/trade-plans', async ({ request }) => {
+        planHeader = request.headers.get('Idempotency-Key')
+        planBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(TRADE_PLAN_VALIDATED_FIXTURE, { status: 201 })
+      }),
+      http.post('/bkt/api/v1/executions', async ({ request }) => {
+        execBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(EXECUTION_FILLED_FIXTURE, { status: 201 })
+      }),
+    )
+
+    const order = await new HttpPortfolioApi().submitOrder(OPEN)
+
+    // plt takes a header, bkt takes a body field (§7.7). Getting this backwards
+    // means neither service dedupes and a retry opens two positions.
+    expect(planHeader).toBe('open-fixed-key')
+    expect(execBody.idempotency_key).toBe('open-fixed-key')
+    expect(execBody.trade_plan_id).toBe(TRADE_PLAN_VALIDATED_FIXTURE.id)
+    // bkt reads the plan from plt; sending one inline is a 422.
+    expect(execBody).not.toHaveProperty('trade_plan')
+    // D11: pinned, never derived from the request.
+    expect(planBody.execution_mode).toBe('SILENT')
+    expect(planBody.risk_profile).toBe('HIGH_REWARD_HIGH_RISK')
+    expect(planBody.side).toBe('LONG')
+    expect(order.status).toBe('FILLED')
+    expect(order.price).toBe(15.8)
+  })
+
+  it('returns a NO_FILL as an outcome and retains it for the session', async () => {
+    server.use(
+      http.post('/bkt/api/v1/executions', () =>
+        HttpResponse.json(EXECUTION_NO_FILL_FIXTURE, { status: 201 }),
+      ),
+    )
+    const api = new HttpPortfolioApi()
+    const order = await api.submitOrder(OPEN)
+
+    // A 201 that opened nothing is a success, not an error and not "pending".
+    expect(order.status).toBe('NO_FILL')
+    expect(order.sessionOnly).toBe(true)
+
+    // …and it appears in order history even though no silent-trade row exists.
+    const history = await api.getOrders()
+    expect(history.some((o) => o.id === EXECUTION_NO_FILL_FIXTURE.execution_id)).toBe(true)
+  })
+
+  it('turns plt’s 422 into a REJECTED outcome carrying the reasons verbatim', async () => {
+    server.use(
+      http.post('/plt/api/v1/trade-plans', () =>
+        HttpResponse.json(POLICY_REJECTION_PROBLEM, {
+          status: 422,
+          headers: { 'Content-Type': 'application/problem+json' },
+        }),
+      ),
+    )
+    const order = await new HttpPortfolioApi().submitOrder(OPEN)
+    expect(order.status).toBe('REJECTED')
+    expect(order.rejectionReasons).toEqual(['DTE_LT_1', 'DTE_LT_1'])
+    expect(order.tradePlanId).toBe(POLICY_REJECTION_PROBLEM.trade_plan_id)
+  })
+
+  it('surfaces a fill plt never heard about as a recoverable, session-only row', async () => {
+    server.use(
+      http.post('/bkt/api/v1/executions', () =>
+        HttpResponse.json(EXECUTION_PLATFORM_ERROR_FIXTURE, { status: 201 }),
+      ),
+    )
+    const order = await new HttpPortfolioApi().submitOrder(OPEN)
+    expect(order.status).toBe('FILLED')
+    expect(order.reportedToPlatform).toBe(false)
+    expect(order.platformError).toContain('platform unreachable')
+    expect(order.sessionOnly).toBe(true)
+  })
+
+  it('throws — rather than inventing an outcome — when the execution call fails', async () => {
+    server.use(
+      http.post('/bkt/api/v1/executions', () =>
+        HttpResponse.json({ title: 'Bad gateway', status: 502 }, { status: 502 }),
+      ),
+    )
+    // The plan is durable and the execution's fate is unknown: the caller must
+    // retry the *same* operation under the same key, not mint a new one (D6).
+    await expect(new HttpPortfolioApi().submitOrder(OPEN)).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('refuses to close in live mode (HKP-BKT-1) without calling anything', async () => {
+    const api = new HttpPortfolioApi()
+    for (const request of [
+      { ...OPEN, intent: 'close' as const },
+      { ...OPEN, side: 'SELL' as const },
+    ]) {
+      const error = (await api.submitOrder(request).catch((e: unknown) => e)) as ApiError
+      expect(error).toBeInstanceOf(ApiError)
+      expect(error.status).toBe(501)
+      expect(error.problem.gap).toBe('HKP-BKT-1')
+    }
+  })
+
+  it('refuses to open without chain-selected contract identity', async () => {
+    const error = (await new HttpPortfolioApi()
+      .submitOrder({ ...OPEN, contract: undefined })
+      .catch((e: unknown) => e)) as ApiError
+    expect(error.status).toBe(501)
   })
 })

@@ -22,6 +22,7 @@ import type {
   PltTradePlan,
 } from '@/api/http/wire/plt'
 import type { PltWatchlistCapacity, PltWatchlistList } from '@/api/http/wire/watchlist'
+import type { BktExecutionOutcome } from '@/api/http/wire/bkt'
 
 export const PORTFOLIO_FIXTURE: PltPortfolio = {
   id: '2f1d0c9e-3a4b-4c5d-8e9f-0a1b2c3d4e5f',
@@ -389,4 +390,82 @@ export const WATCHLIST_REJECTION_PROBLEM = {
   detail: 'Symbol was excluded by the user and must be restored explicitly',
   rejection_reasons: ['USER_EXCLUDED_REQUIRES_RESTORE'],
   symbol: 'ARKK',
+}
+
+/* ------------------------------------------------------------------ bkt ---- */
+
+/**
+ * A `FILLED` `ExecutionOutcome` that plt recorded.
+ *
+ * Unlike plt, bkt (Pydantic) sends nulls rather than omitting them, and its
+ * `Decimal` fields may arrive as strings — both are represented here so the
+ * adapter is tested against the encoding bkt actually produces.
+ */
+export const EXECUTION_FILLED_FIXTURE: BktExecutionOutcome = {
+  execution_id: 'ex000001-0000-4000-8000-000000000001',
+  trade_plan_id: TRADE_PLAN_VALIDATED_FIXTURE.id,
+  decision_episode_id: null,
+  status: 'FILLED',
+  action: 'ENTRY',
+  contract: {
+    occ_symbol: 'NVDA261218C00190000',
+    option_type: 'CALL',
+    strike: '190.00',
+    expiration: '2026-12-18',
+    dte: 109,
+    underlying_price: '178.40',
+  },
+  fill: {
+    side: 'BUY',
+    quantity: 4,
+    price: '15.80',
+    notional: '6320.00',
+    contract_multiplier: 100,
+    fees: '0.00',
+    cash_effect: '-6320.00',
+  },
+  reason_code: null,
+  fill_model: 'MIDPOINT_WITH_SLIPPAGE',
+  determinism_hash: 'f00dcafe',
+  silent_trade_id: 'aa11bb22-cc33-4d44-8e55-ff66aa77bb88',
+  reported_to_platform: true,
+  platform_error: null,
+  executed_at: '2026-08-31T15:04:05Z',
+  replayed: false,
+}
+
+/** A `NO_FILL`: HTTP 201, no fill, no silent trade, and nothing durable
+ *  anywhere — the outcome that only exists in this response (§7.8). */
+export const EXECUTION_NO_FILL_FIXTURE: BktExecutionOutcome = {
+  execution_id: 'ex000002-0000-4000-8000-000000000002',
+  trade_plan_id: TRADE_PLAN_VALIDATED_FIXTURE.id,
+  status: 'NO_FILL',
+  action: 'ENTRY',
+  contract: EXECUTION_FILLED_FIXTURE.contract,
+  fill: null,
+  reason_code: 'ENTRY_PRICE_ABOVE_BAND',
+  silent_trade_id: null,
+  reported_to_platform: false,
+  platform_error: null,
+  executed_at: '2026-08-31T15:06:11Z',
+  replayed: false,
+}
+
+/** Filled, but bkt could not tell plt. The trade happened; the system of
+ *  record does not know (D3) — recoverable, never a success toast. */
+export const EXECUTION_PLATFORM_ERROR_FIXTURE: BktExecutionOutcome = {
+  ...EXECUTION_FILLED_FIXTURE,
+  execution_id: 'ex000003-0000-4000-8000-000000000003',
+  silent_trade_id: null,
+  reported_to_platform: false,
+  platform_error: 'platform unreachable: connection refused',
+}
+
+/** bkt's own 422, distinct from plt's: the plan reached bkt and was refused. */
+export const BKT_REJECTION_PROBLEM = {
+  type: 'https://stratfolio.local/problems/trade-plan-rejected',
+  title: 'Trade plan rejected',
+  status: 422,
+  detail: 'Trade plan rejected',
+  rejection_reasons: ['CONTRACT_NOT_FOUND'],
 }

@@ -1,11 +1,13 @@
 import { HttpResponse, http } from 'msw'
 import {
   ACTIVITY_FIXTURE,
+  EXECUTION_FILLED_FIXTURE,
   PORTFOLIO_FIXTURE,
   POSITIONS_FIXTURE,
   SILENT_TRADES_FIXTURE,
   THESES_FIXTURE,
   TRADE_PLANS_FIXTURE,
+  TRADE_PLAN_VALIDATED_FIXTURE,
   WATCHLIST_CAPACITY_FIXTURE,
   WATCHLIST_FIXTURE,
 } from '@/test/msw/fixtures/plt'
@@ -23,6 +25,7 @@ import {
  */
 
 const PLT = '/plt/api/v1'
+const BKT = '/bkt/api/v1'
 
 function problem(status: number, body: Record<string, unknown>) {
   return HttpResponse.json(body, {
@@ -123,6 +126,24 @@ export const pltHandlers = [
   }),
 ]
 
-export const handlers = [...pltHandlers]
+/**
+ * The write path (APP-112): plt validates a plan, bkt executes it.
+ *
+ * The defaults are the happy path — a VALIDATED plan and a FILLED execution.
+ * Rejections, NO_FILLs and platform errors are per-test `server.use(...)`
+ * overrides, because each of them is a *different* assertion about how the
+ * ticket must render, not a variation on one.
+ */
+export const bktHandlers = [
+  http.post(`${PLT}/trade-plans`, () =>
+    HttpResponse.json(TRADE_PLAN_VALIDATED_FIXTURE, { status: 201 }),
+  ),
+
+  http.post(`${BKT}/executions`, () =>
+    HttpResponse.json(EXECUTION_FILLED_FIXTURE, { status: 201 }),
+  ),
+]
+
+export const handlers = [...pltHandlers, ...bktHandlers]
 
 export { problem as problemResponse }

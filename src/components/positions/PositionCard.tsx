@@ -12,6 +12,8 @@ import { RiskRewardMeter } from '@/components/intelligence/RiskRewardMeter'
 import { AIUnavailable } from '@/components/intelligence/AIUnavailable'
 import { Button } from '@/components/ui/Button'
 import { TradeTicket } from '@/components/trade/TradeTicket'
+import { OpenOptionTicket } from '@/components/trade/OpenOptionTicket'
+import { isLive } from '@/api/http/env'
 import { ThesisModal } from '@/components/positions/ThesisModal'
 import { OptionContractChips } from '@/components/positions/OptionContractDetails'
 import { usePrice } from '@/store/priceStore'
@@ -180,12 +182,25 @@ export function PositionCard({ valuation }: { valuation: PositionValuation }) {
         </div>
       </div>
 
-      <TradeTicket
-        position={position}
-        price={price}
-        open={tradeOpen}
-        onOpenChange={setTradeOpen}
-      />
+      {/* Live mode gets the silent-execution ticket: contract identity comes
+          off the chain and closing is refused (HKP-BKT-1). The demo keeps its
+          scripted buy/sell ticket, which trades against the demo book. */}
+      {isLive('portfolio') ? (
+        <OpenOptionTicket
+          symbol={position.symbol}
+          initialExpiration={position.option?.expiry}
+          initialRight={position.option?.right}
+          open={tradeOpen}
+          onOpenChange={setTradeOpen}
+        />
+      ) : (
+        <TradeTicket
+          position={position}
+          price={price}
+          open={tradeOpen}
+          onOpenChange={setTradeOpen}
+        />
+      )}
       <ThesisModal
         valuation={valuation}
         open={fullThesisOpen}

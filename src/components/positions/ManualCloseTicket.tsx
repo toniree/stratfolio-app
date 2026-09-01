@@ -10,8 +10,26 @@ import { HoldToConfirmButton } from '@/components/ui/HoldToConfirmButton'
 import { Modal } from '@/components/ui/Modal'
 import { PositionContextPanel } from '@/components/positions/PositionContextPanel'
 import { OrderRoutingAnimation } from '@/components/trade/OrderRoutingAnimation'
+import { isLive } from '@/api/http/env'
 
 type OrderType = 'MARKET' | 'LIMIT'
+
+/**
+ * Whether a user can close a position by hand.
+ *
+ * **False in live mode, deliberately** (HKP-BKT-1). plt's `/silent-trades/{id}/
+ * close` records a fill that *already happened* — it takes an exit price, a
+ * timestamp and fill facts — and the only thing a ticket could supply is an
+ * estimate. Writing an estimate into the system of record as a real exit is
+ * worse than having no button. bkt has no user-initiated exit route either;
+ * BKT-018 is building one, and wiring it is a separate task.
+ *
+ * The demo's simulated close is untouched: it writes to a demo book, and the
+ * copy already says so.
+ */
+export function isManualCloseAvailable(): boolean {
+  return !isLive('portfolio')
+}
 
 export function ManualCloseTicket({
   position,
@@ -83,8 +101,12 @@ export function ManualCloseTicket({
   const estimatedPl = canSend ? (orderPrice - position.avgCost) * quantity * multiplier : 0
   const unit = position.assetType === 'option' ? 'contracts' : 'shares'
 
+  const closeAvailable = isManualCloseAvailable()
+
   const sendOrder = async () => {
-    if (!canSend) return
+    // Belt and braces: the footer hides the control, and this refuses anyway.
+    // A close path that can only be reached by mistake is still a close path.
+    if (!canSend || !closeAvailable) return
     try {
       const order = await submitOrder.mutateAsync({
         symbol: position.symbol,
@@ -127,7 +149,11 @@ export function ManualCloseTicket({
         submittedOrder && 'order-confirmation',
       )}
       footer={
-        submittedOrder ? undefined : (
+        submittedOrder ? undefined : !closeAvailable ? (
+          <Button variant="secondary" className="w-full" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        ) : (
           <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
@@ -147,6 +173,16 @@ export function ManualCloseTicket({
     >
       {submittedOrder ? (
         <CloseOrderSent order={submittedOrder} unit={unit} />
+      ) : !closeAvailable ? (
+        <div className="liquid-inset flex items-start gap-2 rounded-[16px] px-3 py-3 text-[12.5px] leading-relaxed text-ink-soft">
+          <Info size={15} className="mt-0.5 shrink-0" />
+          <span>
+            Closing by hand is not available against the live backend. The platform service records
+            an exit that already happened — an exit price, a timestamp and fill facts — and this
+            ticket could only supply an estimate. A user-initiated exit route is being built
+            (HKP-BKT-1 / BKT-018); until it lands, positions close through their plan.
+          </span>
+        </div>
       ) : (
         <div className="space-y-3">
           <PositionContextPanel

@@ -109,12 +109,19 @@ export function useSubmitOrder() {
     // order row; a NO_FILL or REJECTED still adds an order row and an
     // activity entry. Invalidating only activity left positions and the
     // portfolio hero stale after a fill.
+    // Every outcome moves the system of record, including the two that open
+    // nothing: a NO_FILL and a REJECTED both leave a trade-plan row and an
+    // activity entry behind, so "only invalidate on a fill" would leave the
+    // planner and the activity feed stale exactly when the user is looking for
+    // an explanation.
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['positions'] })
       void qc.invalidateQueries({ queryKey: ['portfolio-meta'] })
       void qc.invalidateQueries({ queryKey: ['performance'] })
+      void qc.invalidateQueries({ queryKey: queryKeys.accounts })
       void qc.invalidateQueries({ queryKey: queryKeys.activity })
       void qc.invalidateQueries({ queryKey: queryKeys.orders })
+      void qc.invalidateQueries({ queryKey: queryKeys.plannerIdeas })
     },
   })
 }

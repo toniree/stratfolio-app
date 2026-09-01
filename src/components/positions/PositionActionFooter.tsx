@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn'
 import type { PlannerIdea } from '@/api/newsTypes'
 import type { Position } from '@/api/types'
 import { PlanNoteIcon } from '@/components/shared/PlanNoteIcon'
-import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
+import { ManualCloseTicket, isManualCloseAvailable } from '@/components/positions/ManualCloseTicket'
 import { PositionPlanSheet } from '@/components/positions/PositionPlanSheet'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 
@@ -77,8 +77,17 @@ export function PositionActionFooter({
         <button
           type="button"
           aria-label={`Exit the ${position.symbol} position`}
+          // Disabled, not hidden, against the live backend: the user should see
+          // that exiting exists and is not available yet (HKP-BKT-1), rather
+          // than wonder where the control went.
+          disabled={!isManualCloseAvailable()}
+          title={
+            isManualCloseAvailable()
+              ? undefined
+              : 'Manual exit is not available against the live backend yet (HKP-BKT-1).'
+          }
           onClick={() => setClosing(true)}
-          className="grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96]"
+          className="grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96] disabled:opacity-40"
         >
           <LogOut size={16} strokeWidth={2.4} />
         </button>

@@ -293,6 +293,29 @@ export interface ThesisView {
 
 export type OrderSide = 'BUY' | 'SELL'
 
+/**
+ * The exact contract an order is for, taken from the live chain (APP-112).
+ *
+ * plt's plan → bkt's execution needs full option identity: bkt re-resolves the
+ * contract from mnd and refuses a plan whose identity does not match
+ * (`CONTRACT_IDENTITY_MISMATCH`). Every field here is a *server* number off the
+ * chain route — nothing in the browser derives a strike, a mid or a DTE.
+ */
+export interface OrderContract {
+  occSymbol: string
+  right: 'CALL' | 'PUT'
+  strike: number
+  /** `YYYY-MM-DD`. */
+  expiry: string
+  /** mnd's own day count, not one recomputed from the browser clock. */
+  dte: number
+  /** Chain mid at selection; the entry band is built around it. */
+  mid?: number
+  bid?: number
+  ask?: number
+  underlyingPrice?: number
+}
+
 export interface OrderRequest {
   symbol: string
   side: OrderSide
@@ -301,6 +324,22 @@ export interface OrderRequest {
   estimatedPrice: number
   brokerageId?: BrokerageId
   positionId?: string
+  /**
+   * Whether this opens exposure or closes an existing position.
+   *
+   * Closing is **blocked in live mode** (HKP-BKT-1): plt's `/close` demands
+   * real fill facts and no user-initiated exit route exists, so a ticket must
+   * never supply an estimate. BKT-018 is building one; wiring it is a
+   * follow-up task, not this one.
+   */
+  intent?: 'open' | 'close'
+  /** Required to open in live mode — see `OrderContract`. */
+  contract?: OrderContract
+  /** The thesis this order acts on, when it came from one. */
+  thesisId?: string
+  /** Structured exits, as **fractions** (§7.1): 0.35 is +35%. */
+  profitTargetPct?: number
+  stopLossPct?: number
   /**
    * Stable idempotency key for this *logical* operation (D6). A network retry
    * of the same attempt reuses it; a user's deliberate "try again" after a
@@ -341,6 +380,21 @@ export interface Order {
   rejectionReasons?: string[]
   /** plt trade plan behind this order, when there is one. */
   tradePlanId?: string
+  /** bkt's execution id, when an execution was attempted. */
+  executionId?: string
+  /** bkt's own reason for a NO_FILL (`SPIKE_NO_FILL`, `ENTRY_PRICE_ABOVE_BAND`)
+   *  or for a refusal, verbatim. */
+  reasonCode?: string
+  /** The silent trade this order created, when it filled and plt recorded it. */
+  silentTradeId?: string
+  /**
+   * True when nothing durable exists for this outcome anywhere — a `NO_FILL`,
+   * or a fill plt never heard about. These rows live only in this session
+   * until HKP-BKT-4 adds a list-executions route, and the UI labels them.
+   */
+  sessionOnly?: boolean
+  /** The contract the order was for, when one was resolved. */
+  contractDetail?: string
   provenance?: Provenance
 }
 

@@ -158,6 +158,46 @@ export interface PltTradePlan {
 }
 
 /**
+ * `POST /api/v1/trade-plans` → `CreateTradePlanRequest`.
+ *
+ * Only `ticker` carries bean validation; everything policy-relevant is a plain
+ * string or number that `PolicyGate` judges, so a bad value is a 422 with
+ * `rejection_reasons[]` rather than a 400. `as_of` is the valuation date the
+ * gate prices the plan against and is required in practice.
+ *
+ * Idempotency is the **`Idempotency-Key` header** here, not a body field
+ * (§7.7). Same key + different body is a 422 `IDEMPOTENCY_KEY_REUSED`.
+ */
+export interface PltCreateTradePlan {
+  ticker: string
+  thesis_id?: string
+  option_type: string
+  side: string
+  expiration: string
+  dte: number
+  strike: WireDecimal
+  target_entry_min: WireDecimal
+  target_entry_max: WireDecimal
+  quantity: number
+  capital_allocation: WireDecimal
+  /** ISO-8601 duration, e.g. `P30D`. */
+  expected_holding_period?: string
+  /** Fractions, not percent points (§7.1). */
+  profit_target_pct?: WireDecimal
+  stop_loss_pct?: WireDecimal
+  max_holding_days?: number
+  dte_floor?: number
+  /** Pinned constants, never UI state (D11) — see `http/policy.ts`. */
+  execution_mode: string
+  risk_profile: string
+  reasoning?: string
+  underlying_snapshot?: Record<string, unknown>
+  decision_inputs?: Record<string, unknown>
+  /** `YYYY-MM-DD` valuation date. The response does not echo it (§7.9). */
+  as_of: string
+}
+
+/**
  * plt `ActionType` — the complete enum, newest roster.
  *
  * This is a strict superset of the app's activity kinds and grows on plt's
