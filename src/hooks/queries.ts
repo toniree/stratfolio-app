@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ideasApi, newsApi, plannerApi, portfolioApi } from '@/api'
+import { activeUniverseApi, ideasApi, newsApi, plannerApi, portfolioApi } from '@/api'
 import type { OrderRequest, PerformancePeriod } from '@/api/types'
 import type { CreatePlannerIdeaInput, PlannerIdea, UpdatePlannerIdeaInput } from '@/api/newsTypes'
+import type { AddUniverseSymbolInput } from '@/api/portfolioApi'
 import { useOrderToastStore } from '@/store/orderToastStore'
 
 export const queryKeys = {
@@ -17,6 +18,7 @@ export const queryKeys = {
   news: ['news'] as const,
   article: (id: string) => ['news', id] as const,
   plannerIdeas: ['planner-ideas'] as const,
+  activeUniverse: ['active-universe'] as const,
 }
 
 export function useAccounts() {
@@ -170,4 +172,55 @@ export function useDeletePlannerIdea() {
       void qc.invalidateQueries({ queryKey: queryKeys.plannerIdeas })
     },
   })
+}
+
+/* --------------------------------------------------------------------------
+ * ActiveUniverse (plt watchlist).
+ *
+ * Every mutation invalidates the whole universe rather than patching one
+ * entry, because plt's response to one symbol can change others: an add may
+ * evict a different symbol to make room, and capacity counts move with any
+ * change. Optimistically editing a single row would show a universe plt does
+ * not have.
+ * ----------------------------------------------------------------------- */
+
+export function useActiveUniverse() {
+  return useQuery({
+    queryKey: queryKeys.activeUniverse,
+    queryFn: () => activeUniverseApi.getUniverse(),
+  })
+}
+
+function useUniverseMutation<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.activeUniverse })
+      // Universe changes are recorded as plt activity rows.
+      void qc.invalidateQueries({ queryKey: queryKeys.activity })
+    },
+  })
+}
+
+export function useAddUniverseSymbol() {
+  return useUniverseMutation(({ symbol, input }: { symbol: string; input: AddUniverseSymbolInput }) =>
+    activeUniverseApi.addSymbol(symbol, input),
+  )
+}
+
+export function useSetUniversePinned() {
+  return useUniverseMutation(({ symbol, pinned }: { symbol: string; pinned: boolean }) =>
+    activeUniverseApi.setPinned(symbol, pinned),
+  )
+}
+
+export function useRestoreUniverseSymbol() {
+  return useUniverseMutation((symbol: string) => activeUniverseApi.restoreSymbol(symbol))
+}
+
+export function useExcludeUniverseSymbol() {
+  return useUniverseMutation(({ symbol, reason }: { symbol: string; reason?: string }) =>
+    activeUniverseApi.excludeSymbol(symbol, reason),
+  )
 }

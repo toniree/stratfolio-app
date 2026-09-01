@@ -1,4 +1,5 @@
 import type {
+  ActiveUniverseApi,
   AssistantApi,
   AuthApi,
   IdeasApi,
@@ -12,7 +13,9 @@ import { mockNewsApi } from '@/api/mock/MockNewsApi'
 import { mockPlannerApi } from '@/api/mock/MockPlannerApi'
 import { mockAuthApi } from '@/api/mock/MockAuthApi'
 import { mockAssistantApi } from '@/api/mock/MockAssistantApi'
+import { mockActiveUniverseApi } from '@/api/mock/MockActiveUniverseApi'
 import { httpPortfolioApi } from '@/api/http/HttpPortfolioApi'
+import { httpActiveUniverseApi } from '@/api/http/HttpActiveUniverseApi'
 import { isLive } from '@/api/http/env'
 
 /**
@@ -29,6 +32,13 @@ import { isLive } from '@/api/http/env'
  * all — enforced by `.oxlintrc.json` and `importBoundary.test.ts` (D4).
  */
 export const portfolioApi: PortfolioApi = isLive('portfolio') ? httpPortfolioApi : mockPortfolioApi
+
+// plt's watchlist API is complete and browser-ready today — the app simply
+// never called it. Its own flag, because the ActiveUniverse is a different
+// product from the portfolio (plan §3.8).
+export const activeUniverseApi: ActiveUniverseApi = isLive('universe')
+  ? httpActiveUniverseApi
+  : mockActiveUniverseApi
 
 // Blocked on backend capability, or on a later wave — see `.env.example` and
 // `../stratfolio/docs/plans/APP_HOOKUP_BACKEND_GAPS_V1.md`.

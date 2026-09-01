@@ -312,3 +312,66 @@ export interface Session {
   token: string
   user: User
 }
+
+/* ---------------------------------------------------------------------------
+ * ActiveUniverse — the symbols the decision engine works on (plt watchlist).
+ *
+ * Deliberately distinct from the terminal tape (`Watchlist.tsx`), which is a
+ * local, cosmetic ticker rail. Adding a symbol here changes what the AI looks
+ * at; adding one there changes what the user looks at. Conflating them means a
+ * casual glance at a ticker silently enrols it in the trading universe, and
+ * plt's default-pinned universe floods a cosmetic rail (plan §3.8).
+ * ------------------------------------------------------------------------ */
+
+/** Why an entry is in the universe (plt `WatchlistEntryKind`). */
+export type UniverseEntryKind =
+  | 'DEFAULT_PINNED'
+  | 'USER_PINNED'
+  | 'AI_SELECTED'
+  | 'EVENT_PROMOTED'
+
+/** Membership state (plt `WatchlistStatus`). Removal is a soft exclude — plt
+ *  never deletes an entry, so a re-add needs an explicit restore. */
+export type UniverseStatus = 'ACTIVE' | 'USER_EXCLUDED'
+
+/** Whether the symbol resolves to a tradable instrument (plt
+ *  `ValidationStatus`). `UNRESOLVABLE` is why a symbol can sit in the universe
+ *  and never produce a plan. */
+export type UniverseValidationStatus = 'UNVALIDATED' | 'VALID' | 'UNRESOLVABLE'
+
+export type UniverseInstrumentType = 'EQUITY' | 'ETF' | 'UNKNOWN'
+
+export interface UniverseEntry {
+  symbol: string
+  instrumentType: UniverseInstrumentType
+  kind: UniverseEntryKind
+  status: UniverseStatus
+  /** 0..1 ranking score; absent until the engine has evaluated the symbol. */
+  priorityScore?: number
+  /** Protected entries cannot be evicted to make room for a new candidate. */
+  isProtected: boolean
+  protectionReasons: string[]
+  hasOpenTrade: boolean
+  positionProtected: boolean
+  addedAt?: string
+  lastPromotedAt?: string
+  lastEvictedAt?: string
+  lastEvaluatedAt?: string
+  reason?: string
+  validationStatus: UniverseValidationStatus
+  provenance: Provenance
+}
+
+export interface UniverseCapacity {
+  activeCount: number
+  max: number
+  availableSlots: number
+  protectedCount: number
+  unresolvedCount: number
+}
+
+export interface ActiveUniverse {
+  entries: UniverseEntry[]
+  capacity: UniverseCapacity
+  provenance: Provenance
+}

@@ -15,6 +15,7 @@ import { ResearchPage } from '@/routes/ResearchPage'
 import { PlannerIdeaDetailsPage } from '@/routes/PlannerIdeaDetailsPage'
 import { ActivityPage } from '@/routes/ActivityPage'
 import { ProfilePage } from '@/routes/ProfilePage'
+import { ActiveUniversePage } from '@/routes/ActiveUniversePage'
 import { AuthPage } from '@/routes/AuthPage'
 
 const queryClient = new QueryClient({
@@ -54,6 +55,9 @@ export default function App() {
             <Route path="research" element={<ResearchPage />} />
             <Route path="activity" element={<ActivityPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            {/* The AI's symbol universe (plt watchlist) — deliberately not the
+                terminal watchlist tape, which stays local (plan §3.8). */}
+            <Route path="universe" element={<ActiveUniversePage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/app/portfolio" replace />} />

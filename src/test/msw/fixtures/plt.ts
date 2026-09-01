@@ -20,6 +20,7 @@ import type {
   PltSilentTrade,
   PltTradePlan,
 } from '@/api/http/wire/plt'
+import type { PltWatchlistCapacity, PltWatchlistList } from '@/api/http/wire/watchlist'
 
 export const PORTFOLIO_FIXTURE: PltPortfolio = {
   id: '2f1d0c9e-3a4b-4c5d-8e9f-0a1b2c3d4e5f',
@@ -248,7 +249,7 @@ export const ACTIVITY_FIXTURE: PltActivity[] = [
   },
 ]
 
-export const WATCHLIST_FIXTURE = {
+export const WATCHLIST_FIXTURE: PltWatchlistList = {
   entries: [
     {
       symbol: 'MU',
@@ -300,7 +301,7 @@ export const WATCHLIST_FIXTURE = {
   unresolved_count: 1,
 }
 
-export const WATCHLIST_CAPACITY_FIXTURE = {
+export const WATCHLIST_CAPACITY_FIXTURE: PltWatchlistCapacity = {
   active_count: 2,
   max: 125,
   available_slots: 123,

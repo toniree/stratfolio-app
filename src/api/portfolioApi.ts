@@ -1,4 +1,5 @@
 import type {
+  ActiveUniverse,
   ActivityEvent,
   Idea,
   Order,
@@ -9,6 +10,7 @@ import type {
   PortfolioMeta,
   PortfolioOutlook,
   Position,
+  UniverseEntry,
 } from '@/api/types'
 import type {
   CreatePlannerIdeaInput,
@@ -74,4 +76,36 @@ export interface AuthApi {
   signup(email: string, password: string, name: string): Promise<import('@/api/types').Session>
   login(email: string, password: string): Promise<import('@/api/types').Session>
   logout(): Promise<void>
+}
+
+/**
+ * The ActiveUniverse — plt `/api/v1/watchlist*`.
+ *
+ * Its own seam, not part of `PortfolioApi`, because it is a different product
+ * from the terminal tape (plan §3.8). This one governs what the decision
+ * engine looks at: capacity, pinning, AI promotion and symbol validation.
+ * `Watchlist.tsx` stays local and must never call any of this.
+ */
+export interface ActiveUniverseApi {
+  getUniverse(): Promise<ActiveUniverse>
+  /** Add or re-add a symbol. plt honours `pinned` only for `source: USER`. */
+  addSymbol(symbol: string, input: AddUniverseSymbolInput): Promise<UniverseEntry>
+  setPinned(symbol: string, pinned: boolean): Promise<UniverseEntry>
+  /**
+   * Bring back a user-excluded symbol.
+   *
+   * Separate from `addSymbol` because plt's exclusion is sticky: a plain add
+   * on an excluded symbol is refused with `USER_EXCLUDED_REQUIRES_RESTORE`
+   * (422), which is deliberate — an AI promotion must not silently undo a
+   * user's decision to drop a symbol.
+   */
+  restoreSymbol(symbol: string): Promise<UniverseEntry>
+  /** Soft-exclude. plt never deletes an entry; it records who excluded it. */
+  excludeSymbol(symbol: string, reason?: string): Promise<UniverseEntry>
+}
+
+export interface AddUniverseSymbolInput {
+  source: 'USER' | 'AI' | 'NEWS' | 'SYSTEM'
+  pinned?: boolean
+  reason?: string
 }
