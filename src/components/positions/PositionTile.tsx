@@ -23,6 +23,7 @@ import { StudyTip } from '@/components/shared/StudyTip'
 import { MINI_CHART_HEIGHT, PositionMiniChart } from '@/components/charts/PositionMiniChart'
 import { optionPremiumHistory, underlyingHistory } from '@/lib/optionHistory'
 import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
+import { planTitle } from '@/lib/planIntent'
 import { PositionFieldSettings } from '@/components/positions/PositionFieldSettings'
 import { PositionPlanSheet } from '@/components/positions/PositionPlanSheet'
 import {
@@ -735,7 +736,7 @@ export function positionExecutionCriteria(
 ): PositionExecutionCriterion[] {
   const criteria: PositionExecutionCriterion[] = plans.slice(0, 3).map((plan) => ({
     source: plan.source,
-    text: plan.originalPrompt?.trim() || plan.title.trim(),
+    text: plan.originalPrompt?.trim() || planTitle(plan),
   }))
 
   const riskFloor = formatMoney(Math.max(0.01, position.avgCost * 0.78))

@@ -8,7 +8,7 @@ vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual<typeof import('react-router-dom')>('react-router-dom')),
   useNavigate: () => navigateSpy,
 }))
-import type { Idea } from '@/api/types'
+import type { Idea, ThesisView } from '@/api/types'
 import { RecTile } from '@/components/thesis/RecTile'
 
 vi.mock('@/store/priceStore', () => ({
@@ -62,6 +62,20 @@ const idea = {
   },
 } satisfies Idea
 
+/** The thesis the demo idea hangs off — the shape `MockIdeasApi` produces. */
+const thesis: ThesisView = {
+  id: idea.id,
+  symbol: idea.symbol,
+  direction: 'BULLISH',
+  rationale: idea.ai.thesis[0],
+  // Fractional on the wire and in the view model (§7.4).
+  confidence: idea.ai.conviction / 100,
+  source: 'ai',
+  createdAt: idea.ai.updatedAt,
+  provenance: 'mock',
+  idea,
+}
+
 function renderTile() {
   // The footer's "plan it" action is a mutation, so the tile needs a client.
   // Retries off keeps a failed mutation from stalling a test.
@@ -71,7 +85,7 @@ function renderTile() {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <RecTile idea={idea} />
+        <RecTile thesis={thesis} idea={idea} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -213,8 +227,8 @@ describe('RecTile modal isolation', () => {
   })
 })
 
-describe('RecTile plan action', () => {
-  it('opens the add modal, carries the typed note in, and plans from it', async () => {
+describe('RecTile decision action', () => {
+  it('opens the accept modal and carries the typed note in', async () => {
     const { useThesisDecisionStore } = await import('@/store/thesisDecisionStore')
     useThesisDecisionStore.setState({ decisions: {} })
 
@@ -222,11 +236,12 @@ describe('RecTile plan action', () => {
     fireEvent.change(screen.getByLabelText('Ask AI about the NVDA thesis'), {
       target: { value: 'only above 145' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /^Plan the NVDA thesis/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Accept the NVDA thesis/ }))
 
-    // Planning is a decision, so it confirms rather than firing on one tap.
-    const note = screen.getByPlaceholderText(/max capital, targets and bands/i)
+    // Accepting is a decision, so it confirms rather than firing on one tap —
+    // and it records a disposition rather than deriving a trade plan (§3.3).
+    const note = screen.getByPlaceholderText(/why this thesis fits/i)
     expect(note).toHaveValue('only above 145')
-    expect(screen.getByRole('button', { name: 'Add trade plan' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Accept thesis' })).toBeInTheDocument()
   })
 })

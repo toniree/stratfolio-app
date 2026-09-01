@@ -6,6 +6,7 @@ import type { ThesisView } from '@/api/types'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { TileShell } from '@/components/shared/TileShell'
 import { ProvenanceTag } from '@/components/shared/ProvenanceTag'
+import { ThesisTileFooter } from '@/components/thesis/ThesisTileFooter'
 
 /**
  * A thesis, rendered as the platform records it (APP-111).
@@ -32,6 +33,10 @@ export function ThesisCard({ thesis, className }: { thesis: ThesisView; classNam
     >
       <ThesisHeader thesis={thesis} />
       <ThesisBody thesis={thesis} className="mt-3" />
+      {/* Accept/reject is a disposition record, not a derived trade plan: plt
+          has no disposition field (HKP-PLT-3), so the decision is local state
+          plus a schema-valid activity row (APP-113). */}
+      <ThesisTileFooter thesis={thesis} />
     </TileShell>
   )
 }

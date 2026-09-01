@@ -147,6 +147,31 @@ describe('§6 — market data (APP-108)', () => {
   })
 })
 
+describe('§3.3 — the client-side planner heuristics (APP-113)', () => {
+  it('no module derives a trade plan from free text in the browser', () => {
+    // `plannerPrompt.ts` regex-matched a ticker out of the mock seed map and
+    // then invented an entry band, a target band, a stop and a horizon from
+    // arithmetic on a seeded open price. `thesisPlan.ts` derived a whole plan
+    // from a thesis, stop included. Both were a client-side model wearing the
+    // decision engine's clothes; the real composer is service-ai's
+    // (HKP-AI-3a, Wave C).
+    for (const file of ALL) {
+      expect(
+        /plannerInputFromPrompt|thesisToPlannerInput/.test(read(file)),
+        `${rel(file)} still derives a plan client-side`,
+      ).toBe(false)
+    }
+  })
+
+  it('writes a user disposition only as a valid ActionType', () => {
+    // plt validates `action_type` against its enum, so a free-form
+    // `THESIS_REJECTED` is a 400, not a nicer-reading feed row (§7.10).
+    const writer = code(join(SRC, 'api/http/userActivity.ts'))
+    expect(writer).toMatch(/action_type: 'USER_ACTIVITY'/)
+    expect(writer).not.toMatch(/action_type: '(THESIS|PLAN)_/)
+  })
+})
+
 describe('§6 / D10 — the global simulated claim', () => {
   it('the demo badge is conditional on the whole build being mocked', () => {
     const source = read(join(SRC, 'components/shell/DemoBadge.tsx'))

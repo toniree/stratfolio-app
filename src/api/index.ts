@@ -16,6 +16,7 @@ import { mockAssistantApi } from '@/api/mock/MockAssistantApi'
 import { mockActiveUniverseApi } from '@/api/mock/MockActiveUniverseApi'
 import { httpPortfolioApi } from '@/api/http/HttpPortfolioApi'
 import { httpIdeasApi } from '@/api/http/HttpIdeasApi'
+import { httpPlannerApi } from '@/api/http/HttpPlannerApi'
 import { httpActiveUniverseApi } from '@/api/http/HttpActiveUniverseApi'
 import { httpMarketDataApi } from '@/api/http/HttpMarketDataApi'
 import { marketDataSimulator } from '@/api/marketData/MarketDataSimulator'
@@ -70,9 +71,16 @@ export const marketDataApi: MarketDataApi | null = isLive('market') ? httpMarket
  */
 export const ideasApi: IdeasApi = isLive('ideas') ? httpIdeasApi : mockIdeasApi
 
+/**
+ * Trade plans — plt `GET/POST /api/v1/trade-plans` (APP-113).
+ *
+ * Reads and creation are live; edit, disable and delete have no plt route at
+ * all (HKP-PLT-4) and are recorded locally plus as a schema-valid activity row.
+ */
+export const plannerApi: PlannerApi = isLive('planner') ? httpPlannerApi : mockPlannerApi
+
 // Blocked on backend capability, or on a later wave — see `.env.example` and
 // `../stratfolio/docs/plans/APP_HOOKUP_BACKEND_GAPS_V1.md`.
 export const newsApi: NewsApi = mockNewsApi // HKP-MND-2
-export const plannerApi: PlannerApi = mockPlannerApi // APP-113 (Wave B)
 export const authApi: AuthApi = mockAuthApi // HKP-AUTH-1 — V1 has zero auth
 export const assistantApi: AssistantApi = mockAssistantApi // HKP-AI-2

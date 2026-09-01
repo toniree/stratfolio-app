@@ -283,7 +283,7 @@ export function RecDetailsPage() {
 
       {/* Same footer, buttons and chat mechanic as the home thesis tiles —
           one component so the two surfaces cannot drift apart. */}
-      <ThesisTileFooter idea={idea} variant="page" onDecided={() => navigate('/app/thesis')} />
+      <ThesisTileFooter thesis={thesis} variant="page" onDecided={() => navigate('/app/thesis')} />
     </div>
   )
 }
@@ -339,6 +339,8 @@ function LiveThesisDetail({ thesis }: { thesis: ThesisView }) {
       ) : null}
 
       <RelatedNews symbol={thesis.symbol} />
+
+      <ThesisTileFooter thesis={thesis} variant="page" />
     </div>
   )
 }

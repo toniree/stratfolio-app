@@ -1,13 +1,27 @@
 import type { PlanCriterion, PlannerIdea, PlannerIntent } from '@/api/newsTypes'
-import { formatMoney } from '@/lib/format'
+import { MISSING, formatMoney, formatRange } from '@/lib/format'
 
 export function planIntent(plan: PlannerIdea): PlannerIntent {
   if (plan.intent) return plan.intent
   return /\b(close|trim|exit|sell)\b/i.test(
-    `${plan.originalPrompt ?? ''} ${plan.title} ${plan.notes}`,
+    `${plan.originalPrompt ?? ''} ${plan.title ?? ''} ${plan.notes}`,
   )
     ? 'close'
     : 'open'
+}
+
+/**
+ * A plan's display name.
+ *
+ * plt records **no title and no author** on a trade plan (§3.3), so a live plan
+ * is named by the thing it actually is — its contract identity — rather than
+ * by a sentence the adapter would have to write on the model's behalf.
+ */
+export function planTitle(plan: PlannerIdea): string {
+  const title = plan.title?.trim()
+  if (title) return title
+  const contract = plan.contractDetail?.trim()
+  return contract ? `${plan.symbol} ${contract}` : plan.symbol
 }
 
 export function watchedPlanOptions(plan: PlannerIdea): string[] {
@@ -37,18 +51,23 @@ export function watchedPlanOptions(plan: PlannerIdea): string[] {
  */
 export function planCriteria(plan: PlannerIdea): PlanCriterion[] {
   if (plan.criteria?.length) return plan.criteria
-  const bandCriterion: PlanCriterion =
-    planIntent(plan) === 'close'
-      ? {
-          text: `Mark reaches the ${formatMoney(plan.targetLow)}–${formatMoney(plan.targetHigh)} exit band`,
-          state: 'unknown',
-        }
-      : {
-          text: `Premium inside the ${formatMoney(plan.entryLow)}–${formatMoney(plan.entryHigh)} entry band`,
-          state: 'unknown',
-        }
+  const criteria: PlanCriterion[] = []
+  const closing = planIntent(plan) === 'close'
+  // A band the plan does not have produces *no criterion*, rather than one
+  // reading "reaches the — band": a live plan has an entry band (which
+  // PolicyGate really validates) and no target band at all (§3.3).
+  const bandLow = closing ? plan.targetLow : plan.entryLow
+  const bandHigh = closing ? plan.targetHigh : plan.entryHigh
+  if (bandLow !== undefined || bandHigh !== undefined) {
+    criteria.push({
+      text: closing
+        ? `Mark reaches the ${formatRange(plan.targetLow, plan.targetHigh)} exit band`
+        : `Premium inside the ${formatRange(plan.entryLow, plan.entryHigh)} entry band`,
+      state: 'unknown',
+    })
+  }
   const riskCriterion: PlanCriterion =
-    plan.stop > 0
+    plan.stop !== undefined && plan.stop > 0
       ? {
           text:
             planIntent(plan) === 'close'
@@ -59,7 +78,8 @@ export function planCriteria(plan: PlannerIdea): PlanCriterion[] {
       : // Not a market condition — a structural fact about a long option, so
         // it is genuinely known.
         { text: 'Defined risk: full premium is the maximum loss', state: 'met' }
-  return [bandCriterion, riskCriterion]
+  criteria.push(riskCriterion)
+  return criteria
 }
 
 export interface PlanExitSummary {
@@ -76,24 +96,40 @@ export interface PlanExitSummary {
  * capital the plan is allowed to deploy, and the risk/reward it implies.
  */
 export function planExitSummary(plan: PlannerIdea, deployed?: number): PlanExitSummary {
-  const entryMid = (plan.entryLow + plan.entryHigh) / 2
-  const targetMid = (plan.targetLow + plan.targetHigh) / 2
+  // Both bands are optional (§3.3). A missing one yields a missing summary
+  // rather than a P/L computed against an entry price of zero.
+  const entryMid = midpoint(plan.entryLow, plan.entryHigh)
+  const targetMid = midpoint(plan.targetLow, plan.targetHigh)
   const base =
     deployed && deployed > 0
       ? deployed
       : plan.maxAmount && plan.maxAmount > 0
         ? plan.maxAmount
         : 1000
-  const plAt = (target: number) => (entryMid > 0 ? base * (target / entryMid - 1) : 0)
-  const risk = plan.stop > 0 ? entryMid - plan.stop : entryMid
-  const reward = targetMid - entryMid
-  const computed = risk > 0 ? reward / risk : 0
+  const plAt = (target?: number) =>
+    entryMid !== undefined && entryMid > 0 && target !== undefined
+      ? base * (target / entryMid - 1)
+      : 0
+  const risk =
+    entryMid === undefined
+      ? undefined
+      : plan.stop !== undefined && plan.stop > 0
+        ? entryMid - plan.stop
+        : entryMid
+  const reward =
+    targetMid !== undefined && entryMid !== undefined ? targetMid - entryMid : undefined
+  const computed = risk !== undefined && risk > 0 && reward !== undefined ? reward / risk : 0
   const ratio = plan.ai?.riskRewardRatio ?? computed
   return {
-    range: `${formatMoney(plan.targetLow)}–${formatMoney(plan.targetHigh)}`,
+    range: formatRange(plan.targetLow, plan.targetHigh),
     plLow: plAt(plan.targetLow),
     plHigh: plAt(plan.targetHigh),
-    ratio: ratio > 0 ? `${ratio.toFixed(1)} : 1` : '—',
-    time: plan.horizon,
+    ratio: ratio > 0 ? `${ratio.toFixed(1)} : 1` : MISSING,
+    time: plan.horizon ?? MISSING,
   }
+}
+
+function midpoint(low?: number, high?: number): number | undefined {
+  if (low === undefined && high === undefined) return undefined
+  return ((low ?? high!) + (high ?? low!)) / 2
 }

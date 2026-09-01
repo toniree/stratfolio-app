@@ -15,7 +15,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { formatMoney } from '@/lib/format'
+import { MISSING, formatMoney } from '@/lib/format'
 import type { Position } from '@/api/types'
 import type { PlannerIdea, PlannerIdeaSource, PlannerIntent } from '@/api/newsTypes'
 import { Button } from '@/components/ui/Button'
@@ -27,7 +27,7 @@ import {
   usePositions,
   useUpdatePlannerIdea,
 } from '@/hooks/queries'
-import { planIntent, watchedPlanOptions } from '@/lib/planIntent'
+import { planTitle, planIntent, watchedPlanOptions } from '@/lib/planIntent'
 import { adjustPlanFromPrompt, parseMaxAmountFromPrompt } from '@/lib/planPrompt'
 import { usePrice, usePrices } from '@/store/priceStore'
 import { useUiStore } from '@/store/uiStore'
@@ -785,11 +785,14 @@ function fallbackPositionMaxAmount(position: Position): number {
 }
 
 function originalPrompt(plan: PlannerIdea): string {
-  return plan.originalPrompt?.trim() || plan.title.trim() || plan.notes.trim()
+  return plan.originalPrompt?.trim() || planTitle(plan) || plan.notes.trim()
 }
 
-function formatRange(low: number, high: number): string {
-  return low === high ? formatMoney(low) : `${formatMoney(low)} – ${formatMoney(high)}`
+function formatRange(low?: number, high?: number): string {
+  if (low === undefined && high === undefined) return MISSING
+  const lo = low ?? high!
+  const hi = high ?? low!
+  return lo === hi ? formatMoney(lo) : `${formatMoney(lo)} – ${formatMoney(hi)}`
 }
 
 /**
@@ -808,10 +811,10 @@ export function positionPlanPresentation(
   if (plan) {
     return {
       source: plan.source,
-      title: plan.title,
+      title: planTitle(plan),
       notes: plan.notes,
-      trigger: plan.horizon,
-      target: `${formatMoney(plan.targetLow)} – ${formatMoney(plan.targetHigh)}`,
+      trigger: plan.horizon ?? MISSING,
+      target: formatRange(plan.targetLow, plan.targetHigh),
     }
   }
 

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import { ThesisCard } from '@/components/thesis/ThesisCard'
+import { ThesisBody, ThesisCard, ThesisHeader } from '@/components/thesis/ThesisCard'
 import { toThesisView } from '@/api/http/adapters/thesis'
 import { THESIS_FIXTURE, THESIS_SPARSE_FIXTURE } from '@/test/msw/fixtures/plt'
 
@@ -38,7 +38,14 @@ describe('ThesisCard', () => {
   })
 
   it('shows no price, target, upside or recommendation anywhere', () => {
-    const { container } = renderCard()
+    // The thesis itself, without the shared ask/decide composer — that footer's
+    // example prompts are the user's own words, not a claim about the thesis.
+    const { container } = render(
+      <MemoryRouter>
+        <ThesisHeader thesis={toThesisView(THESIS_FIXTURE)} />
+        <ThesisBody thesis={toThesisView(THESIS_FIXTURE)} full />
+      </MemoryRouter>,
+    )
     const text = container.textContent ?? ''
     expect(text).not.toMatch(/\$\d/)
     expect(text).not.toMatch(/\bupside\b/i)

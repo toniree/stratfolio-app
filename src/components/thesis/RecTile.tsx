@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatPercent, formatSignedPercent } from '@/lib/format'
-import type { Idea } from '@/api/types'
+import type { Idea, ThesisView } from '@/api/types'
 import { usePrice } from '@/store/priceStore'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { MINI_CHART_HEIGHT } from '@/components/charts/PositionMiniChart'
@@ -29,8 +29,15 @@ import { StudyBadge, ThesisStatSettings } from '@/components/thesis/ThesisStatSe
 import { StudyTip } from '@/components/shared/StudyTip'
 import { thesisAnalytics } from '@/lib/thesisAnalytics'
 
-/** AI trade recommendation tile for the home carousel. */
-export function RecTile({ idea }: { idea: Idea }) {
+/**
+ * AI trade recommendation tile for the home carousel.
+ *
+ * Takes both halves: the thesis plt records, and the demo book's fully
+ * specified `Idea` that every number on this tile is drawn from. A live thesis
+ * has no such idea and renders through `ThesisCard` instead — the caller
+ * branches on `thesis.idea`, so this component never has to.
+ */
+export function RecTile({ thesis, idea }: { thesis: ThesisView; idea: Idea }) {
   const navigate = useNavigate()
   const snap = usePrice(idea.symbol)
   const to = `/app/thesis/${idea.id}`
@@ -262,7 +269,7 @@ export function RecTile({ idea }: { idea: Idea }) {
 
         {/* Keeps the banner off the scenario ladder when the tile is full. */}
         <div className="h-[1mm] shrink-0 lg:hidden" aria-hidden />
-        <ThesisTileFooter idea={idea} />
+        <ThesisTileFooter thesis={thesis} />
 
         {/* ---------- Desktop keeps the compact three-stat strip ---------- */}
         <dl className="mt-2.5 hidden grid-cols-3 gap-2 border-t border-line pt-2.5 lg:grid">

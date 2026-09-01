@@ -12,7 +12,8 @@ import {
 import { cn } from '@/lib/cn'
 import { useUpdatePlannerIdea } from '@/hooks/queries'
 import { adjustPlanFromPrompt } from '@/lib/planPrompt'
-import { formatMoney, formatQty, formatSignedMoney } from '@/lib/format'
+import { recordUserDecision } from '@/api/http/userActivity'
+import { formatMoneyOr, MISSING, formatMoney, formatQty, formatSignedMoney } from '@/lib/format'
 import { sortPlansByTriggerSoon, triggerSoonPercent } from '@/lib/plannerSort'
 import type { PlannerIdea } from '@/api/newsTypes'
 import type { Position } from '@/api/types'
@@ -20,7 +21,7 @@ import type { PositionValuation } from '@/lib/portfolioMath'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
-import { planExitSummary, planIntent, watchedPlanOptions } from '@/lib/planIntent'
+import { planExitSummary, planIntent, planTitle, watchedPlanOptions } from '@/lib/planIntent'
 import { PlanCriteriaList } from '@/components/plan/PlanCriteriaList'
 import { Modal } from '@/components/ui/Modal'
 import { usePlanExecutionStore } from '@/store/planExecutionStore'
@@ -67,7 +68,7 @@ export function UpcomingTradePlans({
     : undefined
   const executionPrice =
     executionValuation?.price ??
-    (executionPlan ? (executionPlan.entryLow + executionPlan.entryHigh) / 2 : 0)
+    (executionPlan ? planEntryMid(executionPlan) ?? 0 : 0)
 
   useEffect(
     () => () => {
@@ -144,7 +145,7 @@ export function UpcomingTradePlans({
             // AI Trading only governs AI-authored automation. User-authored
             // plans remain active when the global AI toggle is off.
             const inert = disabled || (!aiTradingEnabled && !userMade)
-            const lastPrompt = plan.originalPrompt ?? plan.title
+            const lastPrompt = plan.originalPrompt ?? planTitle(plan)
             const exit = planExitSummary(plan, valuation?.marketValue ?? maxAmount)
 
             return (
@@ -378,6 +379,14 @@ export function UpcomingTradePlans({
                         onClick={(event) => {
                           if (disabled) {
                             activatePlan(plan.id)
+                            // plt has no route that re-enables a plan
+                            // (HKP-PLT-4), so the durable trace of the decision
+                            // is an audit row; the state itself stays local.
+                            void recordUserDecision({
+                              decision: 'PLAN_ENABLED',
+                              entityType: 'trade_plan',
+                              entityId: plan.id,
+                            })
                           } else {
                             event.preventDefault()
                           }
@@ -489,6 +498,15 @@ export function UpcomingTradePlans({
                 if (plan) {
                   disablePlan(plan.id)
                   const note = disableReason.trim()
+                  // Local state plus a schema-valid `USER_ACTIVITY` row: plt
+                  // exposes no update route and no path sets CANCELLED
+                  // (HKP-PLT-4), so this is the only durable record there is.
+                  void recordUserDecision({
+                    decision: 'PLAN_DISABLED',
+                    entityType: 'trade_plan',
+                    entityId: plan.id,
+                    reason: note || undefined,
+                  })
                   // Why a plan was switched off is the signal worth keeping, so
                   // it rides along to the assistant rather than being discarded.
                   if (note) {
@@ -535,10 +553,10 @@ export function UpcomingTradePlans({
               />
               <DisableFact
                 label="Stop"
-                value={formatMoney(disableConfirmation.stop)}
+                value={formatMoneyOr(disableConfirmation.stop)}
                 tone="down"
               />
-              <DisableFact label="Horizon" value={disableConfirmation.horizon} />
+              <DisableFact label="Horizon" value={disableConfirmation.horizon ?? MISSING} />
               <DisableFact
                 label="Readiness"
                 value={triggerSoonPercent(disableConfirmation)}
@@ -733,8 +751,12 @@ function PlanPreviewFact({ label, value }: { label: string; value: string }) {
   )
 }
 
-function formatRange(low: number, high: number): string {
-  return low === high ? formatMoney(low) : `${formatMoney(low)}–${formatMoney(high)}`
+function formatRange(low?: number, high?: number): string {
+  // Missing stays missing: plt records no target band and no absolute stop.
+  if (low === undefined && high === undefined) return MISSING
+  const lo = low ?? high!
+  const hi = high ?? low!
+  return lo === hi ? formatMoney(lo) : `${formatMoney(lo)}–${formatMoney(hi)}`
 }
 
 /**
@@ -748,7 +770,9 @@ function formatRange(low: number, high: number): string {
  * there is none.
  */
 function orderPositionFromPlan(plan: PlannerIdea): Position {
-  const price = (plan.entryLow + plan.entryHigh) / 2
+  // No entry band means no price to preview the ticket against — 0, not an
+  // invented mid, and the ticket renders it as the absence it is.
+  const price = planEntryMid(plan) ?? 0
   return {
     id: `planned-${plan.id}`,
     symbol: plan.symbol,
@@ -761,4 +785,11 @@ function orderPositionFromPlan(plan: PlannerIdea): Position {
     ai: plan.ai,
     provenance: plan.provenance,
   }
+}
+
+/** The midpoint of a plan's entry band, when it has one. */
+function planEntryMid(plan: PlannerIdea): number | undefined {
+  const { entryLow, entryHigh } = plan
+  if (entryLow === undefined && entryHigh === undefined) return undefined
+  return ((entryLow ?? entryHigh!) + (entryHigh ?? entryLow!)) / 2
 }

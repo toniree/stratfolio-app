@@ -283,7 +283,7 @@ export function PortfolioPage() {
                   // entry band, target band or recommendation for RecTile to
                   // render, so it renders as the thesis plt recorded.
                   thesis.idea ? (
-                    <RecTile key={thesis.id} idea={thesis.idea} />
+                    <RecTile key={thesis.id} thesis={thesis} idea={thesis.idea} />
                   ) : (
                     <ThesisCard key={thesis.id} thesis={thesis} />
                   ),
@@ -347,7 +347,7 @@ export function PortfolioPage() {
             : topRecs.map((thesis) => (
                 <CarouselItem key={thesis.id}>
                   {thesis.idea ? (
-                    <RecTile idea={thesis.idea} />
+                    <RecTile thesis={thesis} idea={thesis.idea} />
                   ) : (
                     <ThesisCard thesis={thesis} />
                   )}

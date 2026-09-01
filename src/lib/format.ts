@@ -42,8 +42,24 @@ export function formatQty(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(4).replace(/0+$/, '')
 }
 
-export function formatRange(low: number, high: number): string {
+/**
+ * The one glyph for "the backend does not record this".
+ *
+ * Since APP-113 a live trade plan has no target band, no absolute stop and no
+ * expected upside — plt has no field for any of them — so these render an
+ * explicit absence rather than a zero, an empty string or a plausible default.
+ */
+export const MISSING = '—'
+
+export function formatRange(low?: number, high?: number): string {
+  if (low === undefined && high === undefined) return MISSING
+  if (low === undefined || high === undefined) return money.format((low ?? high)!)
   return `${money.format(low)} – ${money.format(high)}`
+}
+
+/** `formatMoney` for a value that may simply not exist. */
+export function formatMoneyOr(value: number | undefined, opts?: { whole?: boolean }): string {
+  return value === undefined ? MISSING : formatMoney(value, opts)
 }
 
 export function relativeTime(iso: string, now = Date.now()): string {

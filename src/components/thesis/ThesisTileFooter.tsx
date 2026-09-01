@@ -2,9 +2,8 @@ import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Minus, SendHorizonal, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import type { Idea } from '@/api/types'
-import { useCreatePlannerIdea } from '@/hooks/queries'
-import { thesisToPlannerInput } from '@/lib/thesisPlan'
+import type { ThesisView } from '@/api/types'
+import { recordUserDecision } from '@/api/http/userActivity'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 import { useThesisDecisionStore } from '@/store/thesisDecisionStore'
 import { PlanNoteIcon } from '@/components/shared/PlanNoteIcon'
@@ -53,11 +52,11 @@ const ASK_EXAMPLES = [
  * "not for me" and "convince me".
  */
 export function ThesisTileFooter({
-  idea,
+  thesis,
   variant = 'tile',
   onDecided,
 }: {
-  idea: Idea
+  thesis: ThesisView
   /**
    * `tile` sits inside a carousel card and hides on desktop, where the tile
    * grows its own stat strip. `page` is the sticky bar on a thesis details
@@ -79,8 +78,9 @@ export function ThesisTileFooter({
   const decide = useThesisDecisionStore((state) => state.decide)
   const [rejecting, setRejecting] = useState(false)
   const [planning, setPlanning] = useState(false)
-  const createPlan = useCreatePlannerIdea()
-  const rival = RIVALS[idea.symbol] ?? 'the market leader'
+  const [saving, setSaving] = useState(false)
+  const idea = thesis.idea
+  const rival = RIVALS[thesis.symbol] ?? 'the market leader'
 
   // Composing starts at the first character, not at focus — tapping the field
   // should still let you read the scrolling prompt before committing to it.
@@ -103,24 +103,39 @@ export function ThesisTileFooter({
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`
   }
 
-  const contract = idea.option
-    ? `${idea.symbol} $${idea.option.strike}${idea.option.right === 'CALL' ? 'C' : 'P'} ${idea.option.expiryLabel}`
-    : idea.symbol
+  const contract = idea?.option
+    ? `${thesis.symbol} $${idea.option.strike}${idea.option.right === 'CALL' ? 'C' : 'P'} ${idea.option.expiryLabel}`
+    : thesis.symbol
 
   /**
-   * Anything typed becomes the plan's refinement note, so the field serves both
-   * buttons: ask it as a question, or hand it to the planner as a condition.
+   * Accepting a thesis.
+   *
+   * This used to derive a whole trade plan from the thesis in the browser —
+   * an entry band from the demo idea's numbers, a stop at 65% of the entry
+   * low, a title lifted from the model's first sentence — and save it as if
+   * the user had written it. plt records no disposition on a thesis
+   * (HKP-PLT-3), and a client that answers a missing field by *inventing a
+   * trade plan* is the fabrication §3.3 deletes.
+   *
+   * What an acceptance is now: local state, plus a schema-valid `USER_ACTIVITY`
+   * row in plt so the decision is durable and auditable. Turning a thesis into
+   * a position is the ticket's job, with a real contract.
    */
-  /**
-   * The note carries through: whatever is already typed in the field seeds the
-   * modal, and whatever leaves the modal is what the plan is built from.
-   */
-  const addPlan = async (note: string) => {
-    if (createPlan.isPending) return
-    await createPlan.mutateAsync(thesisToPlannerInput(idea, note))
+  const acceptThesis = async (note: string) => {
+    if (saving) return
+    setSaving(true)
+    decide(thesis.id, 'added', note || undefined)
+    // The audit row is best-effort by design: the decision is already recorded
+    // locally, so a failed write must not undo it.
+    await recordUserDecision({
+      decision: 'THESIS_ACCEPTED',
+      entityType: 'thesis',
+      entityId: thesis.id,
+      reason: note || undefined,
+    })
+    setSaving(false)
     reset()
     setPlanning(false)
-    decide(idea.id, 'added', note || undefined)
     onDecided?.()
   }
 
@@ -134,12 +149,12 @@ export function ThesisTileFooter({
     // though the conversation continues in the floating assistant.
     void sendMessage(`About the ${contract} thesis — ${text}`, {
       kind: 'thesis',
-      id: idea.id,
+      id: thesis.id,
       label: contract,
-      detail: idea.ai
+      detail: idea?.ai
         ? `${idea.ai.recommendation} · ${idea.ai.conviction}/100 conviction`
-        : undefined,
-      to: `/app/thesis/${idea.id}`,
+        : `${thesis.direction} thesis`,
+      to: `/app/thesis/${thesis.id}`,
     })
   }
 
@@ -151,18 +166,24 @@ export function ThesisTileFooter({
    * assistant thread as well as into the decision record.
    */
   const closeThesis = (reason: string) => {
-    decide(idea.id, 'rejected', reason || undefined)
+    decide(thesis.id, 'rejected', reason || undefined)
+    void recordUserDecision({
+      decision: 'THESIS_REJECTED',
+      entityType: 'thesis',
+      entityId: thesis.id,
+      reason: reason || undefined,
+    })
     setRejecting(false)
     onDecided?.()
     if (!reason) return
     void sendMessage(`I passed on the ${contract} thesis — ${reason}`, {
       kind: 'thesis',
-      id: idea.id,
+      id: thesis.id,
       label: contract,
-      detail: idea.ai
+      detail: idea?.ai
         ? `${idea.ai.recommendation} · ${idea.ai.conviction}/100 conviction`
-        : undefined,
-      to: `/app/thesis/${idea.id}`,
+        : `${thesis.direction} thesis`,
+      to: `/app/thesis/${thesis.id}`,
     })
   }
 
@@ -178,7 +199,7 @@ export function ThesisTileFooter({
     >
       <button
         type="button"
-        aria-label={`Reject the ${idea.symbol} thesis`}
+        aria-label={`Reject the ${thesis.symbol} thesis`}
         onClick={(event) => {
           event.stopPropagation()
           setRejecting(true)
@@ -246,7 +267,7 @@ export function ThesisTileFooter({
                 }}
                 onClick={(event) => event.stopPropagation()}
                 onFocus={() => setMinimized(false)}
-                aria-label={`Ask AI about the ${idea.symbol} thesis`}
+                aria-label={`Ask AI about the ${thesis.symbol} thesis`}
                 // Kept for assistive tech, but drawn by the marquee below so the
                 // whole prompt can be read rather than truncated.
                 placeholder={prompt}
@@ -287,8 +308,8 @@ export function ThesisTileFooter({
                 it steps aside while a question is being written. */}
             <button
               type="button"
-              aria-label={`Plan the ${idea.symbol} thesis`}
-              disabled={createPlan.isPending}
+              aria-label={`Accept the ${thesis.symbol} thesis`}
+              disabled={saving}
               onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
             event.stopPropagation()
@@ -325,17 +346,19 @@ export function ThesisTileFooter({
     </div>
 
       <ThesisDecisionModal
-        idea={idea}
+        symbol={thesis.symbol}
+        label={idea?.contractDetail ?? idea?.company}
         mode="add"
         open={planning}
-        pending={createPlan.isPending}
+        pending={saving}
         initialReason={draft}
         onOpenChange={setPlanning}
-        onConfirm={addPlan}
+        onConfirm={acceptThesis}
       />
 
       <ThesisDecisionModal
-        idea={idea}
+        symbol={thesis.symbol}
+        label={idea?.contractDetail ?? idea?.company}
         mode="reject"
         open={rejecting}
         onOpenChange={setRejecting}

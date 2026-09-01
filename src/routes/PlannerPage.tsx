@@ -1,19 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Bot, Power, Sparkles, UserRound, X } from 'lucide-react'
-import { useCreatePlannerIdea, usePlannerIdeas } from '@/hooks/queries'
+import { usePlannerIdeas } from '@/hooks/queries'
 import { StaticPill } from '@/components/shared/Pill'
 import { PlannerIdeaTile, DirectionChip, SourceBadge } from '@/components/plan/PlannerIdeaTile'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
-import { formatMoney, formatPercent } from '@/lib/format'
+import { formatPercent, formatRange } from '@/lib/format'
 import { sortPlansByTriggerSoon } from '@/lib/plannerSort'
 import { usePlanExecutionStore } from '@/store/planExecutionStore'
 import { cn } from '@/lib/cn'
-import { PlanNoteIcon } from '@/components/shared/PlanNoteIcon'
-import { plannerInputFromPrompt } from '@/lib/plannerPrompt'
 import { PageHeader } from '@/components/shared/PageHeader'
 
 type Filter = 'all' | 'ai' | 'user' | 'disabled'
@@ -24,18 +22,14 @@ type Filter = 'all' | 'ai' | 'user' | 'disabled'
  * the user's own written-up ideas.
  */
 export function PlannerPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const focusedId = searchParams.get('idea')
   const sort = searchParams.get('sort')
   const [filter, setFilter] = useState<Filter>('all')
-  const [planPrompt, setPlanPrompt] = useState('')
-  const [promptError, setPromptError] = useState('')
   const focusRef = useRef<HTMLDivElement>(null)
   const disabledIds = usePlanExecutionStore((state) => state.disabledIds)
 
   const { data: ideas, isLoading } = usePlannerIdeas()
-  const createPlan = useCreatePlannerIdea()
   const focused = ideas?.find((i) => i.id === focusedId)
 
   useEffect(() => {
@@ -59,18 +53,6 @@ export function PlannerPage() {
   const userCount = (ideas ?? []).filter((i) => i.source === 'user').length
   const disabledCount = (ideas ?? []).filter((idea) => disabledIds.includes(idea.id)).length
 
-  const handlePromptCreate = async (event: React.FormEvent) => {
-    event.preventDefault()
-    const input = plannerInputFromPrompt(planPrompt)
-    if (!input) {
-      setPromptError('Include a supported ticker symbol so AI can anchor the plan to live market data.')
-      return
-    }
-    setPromptError('')
-    const created = await createPlan.mutateAsync(input)
-    navigate(`/app/plan/${created.id}`)
-  }
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -81,48 +63,13 @@ export function PlannerPage() {
         mobileSubtitle="Your saved setups. Entry always needs an explicit action."
       />
 
-      <form
-        onSubmit={handlePromptCreate}
-        className="glass-flat overflow-hidden rounded-[20px] border-white/[0.1] shadow-[inset_0_1px_rgba(255,255,255,0.08)]"
-      >
-        <div className="flex items-center gap-1.5 border-b border-white/[0.07] px-3.5 py-2.5 text-[9px] font-extrabold tracking-[0.07em] text-white/88 uppercase">
-          <Sparkles size={12} className="text-brand-300" />
-          Create a trade plan with AI
-          <span className="ml-auto text-[8px] font-semibold tracking-normal text-white/42 normal-case">
-            Review before enabling
-          </span>
-        </div>
-        <textarea
-          value={planPrompt}
-          onChange={(event) => {
-            setPlanPrompt(event.target.value)
-            setPromptError('')
-          }}
-          rows={3}
-          aria-label="Trade plan prompt"
-          placeholder={'Type any abstract trade notes. AI will organize your words into a reviewable trade plan. Try to include max amount.\nEx) $5000 on SNDK earnings run-up, sell when doubles'}
-          className="min-h-[84px] w-full resize-none bg-transparent px-3.5 py-3 text-[13px] leading-relaxed font-medium text-white/90 outline-none placeholder:italic placeholder:text-white/42"
-        />
-        {promptError ? (
-          <p className="px-3.5 pb-2 text-[10.5px] font-semibold text-down">{promptError}</p>
-        ) : null}
-        <div className="flex items-center gap-3 border-t border-white/[0.07] bg-[#101824]/42 px-2.5 py-2">
-          <span className="min-w-0 flex-1 truncate text-[9.5px] italic text-white/48">
-            AI extracts ticker, amount, etc.
-          </span>
-          <Button
-            type="submit"
-            size="sm"
-            // Same solid green as every other commit action.
-            variant="success"
-            className="plan-action-button h-9 shrink-0 rounded-xl px-3 font-bold disabled:opacity-75"
-            disabled={!planPrompt.trim() || createPlan.isPending}
-          >
-            <PlanNoteIcon size={19} />
-            {createPlan.isPending ? 'Organizing…' : 'Create'}
-          </Button>
-        </div>
-      </form>
+      {/* The "Create a trade plan with AI" composer used to live here. It was
+          a regex over the prompt that pulled a ticker out of the mock seed
+          map, then invented an entry band, a target band, a stop and a horizon
+          from arithmetic on a seeded open price — a client-side model
+          pretending to be the decision engine (§3.3, §6). The real composer is
+          service-ai's (HKP-AI-3a) and lands in Wave C behind a server-side
+          gate. Plans are created from a real contract until then. */}
 
       <div
         role="tablist"
@@ -191,13 +138,19 @@ export function PlannerPage() {
                   size="sm"
                 />
               ) : null}
-              <StaticPill tone="positive">
-                {formatPercent(focused.expectedUpsidePct, 1)} upside
-              </StaticPill>
-              <StaticPill tone="neutral">
-                Entry {formatMoney(focused.entryLow)} – {formatMoney(focused.entryHigh)}
-              </StaticPill>
-              <StaticPill tone="ai">{focused.horizon}</StaticPill>
+              {/* Each pill is dropped rather than rendered as a dash: plt
+                  records no expected upside and no horizon on a plan (§3.3). */}
+              {focused.expectedUpsidePct === undefined ? null : (
+                <StaticPill tone="positive">
+                  {formatPercent(focused.expectedUpsidePct, 1)} upside
+                </StaticPill>
+              )}
+              {focused.entryLow === undefined && focused.entryHigh === undefined ? null : (
+                <StaticPill tone="neutral">
+                  Entry {formatRange(focused.entryLow, focused.entryHigh)}
+                </StaticPill>
+              )}
+              {focused.horizon ? <StaticPill tone="ai">{focused.horizon}</StaticPill> : null}
             </div>
 
             <Button asChild variant="secondary" size="sm" className="mt-3.5 border-white/[0.09] bg-white/[0.035] text-ink-soft">
