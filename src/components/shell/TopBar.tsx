@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import { formatSignedPercent } from '@/lib/format'
 import { computeTotals } from '@/lib/portfolioMath'
 import { usePrices, useTrackedSymbols } from '@/store/priceStore'
+import { marketSymbols } from '@/api/http/env'
 import { useOptionMarks } from '@/hooks/marketQueries'
 import { ProvenanceTag, StaleTag } from '@/components/shared/ProvenanceTag'
 import { useAuthStore } from '@/store/authStore'
@@ -17,21 +18,29 @@ import { MobilePortfolioSummary } from '@/components/shell/MobilePortfolioSummar
 import { MobileMarketTicker } from '@/components/portfolio/MobileMarketTicker'
 import { HeaderOrders } from '@/components/shell/HeaderOrders'
 
+/** How many tiles the strip has room for. */
+const STRIP_TILES = 3
+
 /**
- * Tickers the strip *offers* to show, in order. It shows the ones the bound
- * data source actually serves and nothing else.
+ * The strip shows the head of the configured market symbol list — the tickers
+ * the bound data source is actually being asked for — and only those of them
+ * it serves.
+ *
+ * It deliberately keeps no list of its own. A second hardcoded set would drift
+ * from the dataset (the Wave B0 proof pass found `synthetic-v1` serving SPY,
+ * AAPL and MSFT while this strip asked for QQQ and IWM, spending a poll every
+ * five seconds on two guaranteed 404s).
  *
  * This replaces a DOW tile whose level was manufactured from SPY's day change
  * times 0.42 (§6, "DOW-from-SPY"). No dataset in this system carries the Dow,
  * and a plausible-looking index level is the most dangerous kind of fabricated
- * number: nobody checks a number they recognise. Nothing here is derived from
- * anything else — each tile is one symbol's own quote or it is absent.
+ * number: nobody checks a figure they recognise. Nothing here is derived from
+ * anything else — each tile is one symbol's own quote, or it is absent.
  */
-const INDEX_SYMBOLS = ['SPY', 'QQQ', 'IWM'] as const
-
 export function TopBar() {
   const prices = usePrices()
-  useTrackedSymbols(INDEX_SYMBOLS)
+  const stripSymbols = useMemo(() => marketSymbols().slice(0, STRIP_TILES), [])
+  useTrackedSymbols(stripSymbols)
   const user = useAuthStore((s) => s.session?.user)
   const accountId = useUiStore((s) => s.accountId)
   const brokerageFilter = useUiStore((s) => s.brokerageFilter)
@@ -61,9 +70,9 @@ export function TopBar() {
     () => computeTotals(selectedPositions, prices, marks),
     [selectedPositions, prices, marks],
   )
-  const indices = INDEX_SYMBOLS.map((symbol) => prices[symbol]).filter(
-    (quote) => quote !== undefined,
-  )
+  const indices = stripSymbols
+    .map((symbol) => prices[symbol])
+    .filter((quote) => quote !== undefined)
 
   return (
     <header className="glass-nav sticky top-0 z-20 border-b border-line lg:pl-[284px]">

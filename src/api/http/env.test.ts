@@ -60,6 +60,14 @@ describe('market data configuration (APP-108)', () => {
     expect(hasLiveDomain({ VITE_DATA_MARKET: 'live' })).toBe(true)
   })
 
+  it('defaults to the symbols the active replay dataset actually serves', () => {
+    // mnd's `synthetic-v1` serves these three and nothing else — QQQ and NVDA
+    // answer 404/503 there (Wave B0 proof pass). A default naming symbols the
+    // dataset cannot serve spends every poll on guaranteed failures, and the
+    // list must be re-matched whenever the dataset or provider changes.
+    expect(DEFAULT_MARKET_SYMBOLS).toEqual(['SPY', 'AAPL', 'MSFT'])
+  })
+
   it('parses a symbol request list, upper-cased and de-duplicated', () => {
     expect(marketSymbols({})).toEqual([...DEFAULT_MARKET_SYMBOLS])
     expect(marketSymbols({ VITE_MARKET_SYMBOLS: ' spy , qqq ,spy ' })).toEqual(['SPY', 'QQQ'])

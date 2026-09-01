@@ -62,12 +62,51 @@ describe('MockActiveUniverseApi', () => {
  * default-pinned universe would flood a cosmetic rail.
  */
 describe('terminal tape stays local (§3.8)', () => {
-  it('Watchlist.tsx never touches the ActiveUniverse API or plt', () => {
-    const source = readFileSync(join(ROOT, 'components/terminal/Watchlist.tsx'), 'utf8')
-    expect(source).not.toMatch(/activeUniverseApi/)
-    expect(source).not.toMatch(/ActiveUniverse/)
-    expect(source).not.toMatch(/watchlist\/|api\/v1/)
-    expect(source).not.toMatch(/useAddUniverseSymbol|useExcludeUniverseSymbol/)
+  const TAPE = 'components/terminal/Watchlist.tsx'
+  const raw = readFileSync(join(ROOT, TAPE), 'utf8')
+
+  /**
+   * Executable source: comments stripped.
+   *
+   * This guard is about *coupling* — what the tape imports and calls — and
+   * coupling lives in code, not prose. Scanning raw text made the rule fire on
+   * a comment explaining the very separation it enforces, which pushes a
+   * contributor toward deleting the explanation to appease the test. That is
+   * backwards: the comment is the reason the rule exists, and a test that
+   * cannot tell an identifier from an English sentence is not checking
+   * anything about the program.
+   */
+  const code = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  /** Every module the tape actually imports from. */
+  const imports = [...raw.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)].map((match) => match[1])
+
+  it('Watchlist.tsx imports nothing from the universe seam or the HTTP layer', () => {
+    expect(imports.length).toBeGreaterThan(0)
+    for (const specifier of imports) {
+      expect(specifier, `${TAPE} imports ${specifier}`).not.toMatch(/api\/http/)
+      expect(specifier, `${TAPE} imports ${specifier}`).not.toMatch(/ActiveUniverse/i)
+      expect(specifier, `${TAPE} imports ${specifier}`).not.toMatch(/adapters\/universe/)
+    }
+    // The seam is also reachable as a named export of `@/api`; the tape must
+    // not pull it from there either.
+    expect(code).not.toMatch(/\bactiveUniverseApi\b/)
+  })
+
+  it('Watchlist.tsx calls no universe mutation', () => {
+    // Adding a ticker to a cosmetic rail must never enrol a symbol in the
+    // decision engine's universe.
+    expect(code).not.toMatch(
+      /\buse(?:ActiveUniverse|AddUniverseSymbol|ExcludeUniverseSymbol|RestoreUniverseSymbol|SetUniversePinned)\s*\(/,
+    )
+    expect(code).not.toMatch(/\b(?:addSymbol|excludeSymbol|restoreSymbol|setPinned)\s*\(/)
+  })
+
+  it('Watchlist.tsx issues no request of its own', () => {
+    // A plt route can only appear as a string literal, so this one is checked
+    // on raw source — but as a *request*, not as a word in a sentence.
+    expect(code).not.toMatch(/['"`][^'"`]*\/api\/v1[^'"`]*['"`]/)
+    expect(code).not.toMatch(/\bfetch\s*\(|\brequest\s*\(/)
   })
 
   it('the terminal store holds only local state', () => {

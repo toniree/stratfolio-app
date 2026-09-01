@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Position } from '@/api/types'
 import type { PlannerIdea } from '@/api/newsTypes'
 import { PositionPlanSheet } from '@/components/positions/PositionPlanSheet'
+import { QueryWrapper } from '@/test/queryWrapper'
 
 const mutation = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
@@ -73,6 +74,7 @@ describe('PositionPlanSheet', () => {
         onOpenChange={vi.fn()}
         onOpenPlanner={vi.fn()}
       />,
+      { wrapper: QueryWrapper },
     )
 
     expect(screen.getByText(plan.originalPrompt!)).toHaveClass('line-clamp-2')
@@ -118,6 +120,7 @@ describe('PositionPlanSheet', () => {
         onOpenChange={vi.fn()}
         onOpenPlanner={vi.fn()}
       />,
+      { wrapper: QueryWrapper },
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Add plan' }))
@@ -172,6 +175,7 @@ describe('PositionPlanSheet', () => {
         onOpenChange={vi.fn()}
         onOpenPlanner={vi.fn()}
       />,
+      { wrapper: QueryWrapper },
     )
 
     expect(screen.getByRole('button', { name: 'Add plan' })).toBeInTheDocument()

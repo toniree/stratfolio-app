@@ -83,8 +83,16 @@ export function serviceBase(service: ServiceId, env: EnvBag = readEnv()): string
  * never appears in the price map, and nothing renders for it. The default is
  * deliberately short — one snapshot request per symbol per poll — and is *not*
  * read from the mock seed book, which live code may not import (D4).
+ *
+ * **This list must match the active dataset or provider.** It is not a universe
+ * and makes no claim about what is tradeable; it is only what the tape asks
+ * for. The default matches mnd's `synthetic-v1` replay dataset, which serves
+ * SPY, AAPL and MSFT and nothing else — QQQ and NVDA answer 404/503 there
+ * (Wave B0 proof pass). Point the app at another dataset or a live provider
+ * and override this to match, or the tape spends every poll on symbols that
+ * can only fail.
  */
-export const DEFAULT_MARKET_SYMBOLS: readonly string[] = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'MSFT']
+export const DEFAULT_MARKET_SYMBOLS: readonly string[] = ['SPY', 'AAPL', 'MSFT']
 
 export function marketSymbols(env: EnvBag = readEnv()): string[] {
   const raw = env.VITE_MARKET_SYMBOLS
