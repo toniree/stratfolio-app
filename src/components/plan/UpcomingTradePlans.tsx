@@ -565,8 +565,14 @@ export function UpcomingTradePlans({
 }
 
 function PlansExecutionTicker() {
+  // The old copy said these plans were "close to automatic execution by
+  // meeting plan criteria". Nothing evaluates entry criteria and no runtime
+  // enters a position on its own (HKP-XSV-1) — bkt's monitor scans OPEN
+  // positions only, and entry happens on an explicit POST. Describing an
+  // autonomous loop that does not exist is the most consequential fabrication
+  // in the app, because it is a claim about what happens to the user's money.
   const copy =
-    'Trade plans which are active and close to automatic execution by meeting plan criteria are shown below. You can choose to execute the trade plan prematurely, or disable the plan before it executes, from each dropdown.'
+    'Your active trade plans. Nothing here enters a position on its own — use each dropdown to execute a plan yourself, or to disable it.'
 
   return (
     <div className="max-w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_3%,black_94%,transparent)]">

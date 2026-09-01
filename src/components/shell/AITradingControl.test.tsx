@@ -25,14 +25,14 @@ describe('CompactAITradingToggle', () => {
     expect(enabledToggle).not.toHaveClass('rounded-full', 'border-line')
     expect(enabledToggle).not.toHaveClass('text-emerald-200')
     expect(thumb).toHaveClass('left-0.5', 'bg-[#42dda0]')
+    // No autonomous entry loop exists (HKP-XSV-1), so the copy must not
+    // promise one.
     expect(screen.getByRole('status')).toHaveTextContent(
-      'All active plans can execute automatically.',
+      'The model may draft plans. Entry always needs an explicit action.',
     )
     fireEvent.click(enabledToggle)
 
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Only plans you created by hand or approved will execute automatically.',
-    )
+    expect(screen.getByRole('status')).toHaveTextContent('The model will not draft plans.')
   })
 
   it('uses the same real toggle and confirmation on full-size surfaces', () => {

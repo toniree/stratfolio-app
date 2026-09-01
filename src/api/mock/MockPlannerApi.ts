@@ -59,14 +59,15 @@ export class MockPlannerApi implements PlannerApi {
 
   async getIdeas(): Promise<PlannerIdea[]> {
     await latency(230)
-    return [...this.aiIdeas, ...this.userIdeas].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
+    return [...this.aiIdeas, ...this.userIdeas]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map((idea) => ({ ...idea, provenance: 'mock' as const }))
   }
 
   async getIdea(id: string): Promise<PlannerIdea | undefined> {
     await latency(110)
-    return [...this.aiIdeas, ...this.userIdeas].find((i) => i.id === id)
+    const idea = [...this.aiIdeas, ...this.userIdeas].find((i) => i.id === id)
+    return idea ? { ...idea, provenance: 'mock' } : undefined
   }
 
   async createIdea(input: CreatePlannerIdeaInput): Promise<PlannerIdea> {

@@ -5,6 +5,7 @@ import { relativeTime } from '@/lib/format'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
+import { ProvenanceTag } from '@/components/shared/ProvenanceTag'
 
 const KIND: Record<
   ActivityEvent['kind'],
@@ -31,6 +32,13 @@ export function ActivityPage() {
         mobileSubtitle="Orders you submitted and every change the model made to its view."
         subtitle="Orders you submitted and every change the model made to its view."
       />
+
+      {/* D10: this feed states its own provenance rather than relying on one
+          build-wide claim — activity can be live plt while news beside it is
+          still mocked. */}
+      {events?.length ? (
+        <ProvenanceTag provenance={events[0].provenance} className="ml-0.5" />
+      ) : null}
 
       {isLoading ? (
         <div className="space-y-2.5">

@@ -13,6 +13,7 @@ import {
   usePositions,
 } from '@/hooks/queries'
 import { computeTotals } from '@/lib/portfolioMath'
+import { hasLiveDomain } from '@/api/http/env'
 import type { PerformancePeriod } from '@/api/types'
 import { PeriodSelector } from '@/components/portfolio/PeriodSelector'
 import { PerformanceChart } from '@/components/charts/PerformanceChart'
@@ -57,6 +58,7 @@ export function PortfolioPage() {
   const thesisDecisions = useThesisDecisionStore((s) => s.decisions)
 
   const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  const allSimulated = !hasLiveDomain()
 
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
@@ -303,12 +305,26 @@ export function PortfolioPage() {
         />
       </div>
 
-      <p className="pt-1 pb-2 text-center text-[10.9px] text-[#5b6673]">
-        Every price, position and AI output in this build is simulated.{' '}
-        <Link to="/app/profile" className="font-semibold text-brand-300/70">
-          About this demo
-        </Link>
-      </p>
+      {/* D10: the blanket "everything is simulated" claim is false the moment
+          any domain goes live — it would mislabel a real plt portfolio as
+          simulated and let the still-mocked panels hide behind it. Provenance
+          now lives on the panels (`ProvenanceTag`); this line survives only
+          for a fully mocked build. */}
+      {allSimulated ? (
+        <p className="pt-1 pb-2 text-center text-[10.9px] text-[#5b6673]">
+          Every price, position and AI output in this build is simulated.{' '}
+          <Link to="/app/profile" className="font-semibold text-brand-300/70">
+            About this demo
+          </Link>
+        </p>
+      ) : (
+        <p className="pt-1 pb-2 text-center text-[10.9px] text-[#5b6673]">
+          Some panels are live and some are simulated — each says which.{' '}
+          <Link to="/app/profile" className="font-semibold text-brand-300/70">
+            About this build
+          </Link>
+        </p>
+      )}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn'
 import { NewsCard } from '@/components/news/NewsCard'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { NewsTickerToggle } from '@/components/news/NewsTickerToggle'
+import { ProvenanceTag } from '@/components/shared/ProvenanceTag'
 
 const TIMEFRAMES = [
   { id: 'all', label: 'All time' },
@@ -61,7 +62,15 @@ export function NewsPage() {
         mobileTitle="NEWS"
         mobileSubtitle="Market stories that move your book."
         subtitle="Market stories that move your book. Stories with an AI plan show a glowing plan badge."
-        aside={<NewsTickerToggle />}
+        aside={
+          <span className="inline-flex items-center gap-2">
+            {/* News stays mocked until mnd exposes a browser-reachable news
+                API (HKP-MND-2). The feed says so rather than leaning on a
+                build-wide claim that is false in a mixed build. */}
+            <ProvenanceTag provenance={articles?.[0]?.provenance ?? 'mock'} />
+            <NewsTickerToggle />
+          </span>
+        }
       />
 
       <div className="glass-flat overflow-hidden rounded-[20px] border-white/[0.1] shadow-[inset_0_1px_rgba(255,255,255,0.08),0_14px_34px_-26px_rgba(66,153,255,0.7)]">

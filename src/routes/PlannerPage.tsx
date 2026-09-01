@@ -78,7 +78,7 @@ export function PlannerPage() {
         backLabel="Back to home"
         title="Planner"
         mobileTitle="TRADE PLANS"
-        mobileSubtitle="Plans execute automatically once you enable them."
+        mobileSubtitle="Your saved setups. Entry always needs an explicit action."
       />
 
       <form

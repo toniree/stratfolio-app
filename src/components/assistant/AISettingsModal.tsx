@@ -90,9 +90,15 @@ export function AISettingsModal({
           <SettingRow
             title="Order approval"
             detail={
+              /* Nothing server-side enforces this today (HKP-AI-8): approval
+                 mode, the trading window and the day-loss breaker all live in
+                 this browser, and a client-side kill switch is not a kill
+                 switch. Copy that promises orders "firing the moment criteria
+                 are met" also described an autonomous entry loop that does
+                 not exist (HKP-XSV-1). */
               approvalMode === 'approve'
-                ? 'Every AI order waits for your tap.'
-                : 'Plans you have approved fire the moment criteria are met.'
+                ? 'Every AI order waits for your tap. Saved on this device only.'
+                : 'Approved plans skip the confirmation step. Saved on this device only — not yet enforced by the platform.'
             }
           >
             <Segmented

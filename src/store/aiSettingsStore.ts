@@ -4,15 +4,31 @@ import { persist } from 'zustand/middleware'
 export type ApprovalMode = 'approve' | 'auto'
 export type TradingWindow = 'rth' | 'extended'
 
+/**
+ * AI behaviour preferences.
+ *
+ * Every field here is **device-local and unenforced** (HKP-AI-8). Nothing
+ * server-side checks approval mode, the trading window or the day-loss
+ * breaker, and `POST /api/v1/decision-cycles/run` proceeds straight to a plt
+ * plan and a bkt execution regardless. `maxAllocationPct` is a second,
+ * unenforced copy of a cap PolicyGate already enforces server-side
+ * (`policy.max_portfolio_allocation_pct`) — it should be wired to that key or
+ * dropped, not duplicated.
+ */
 export interface AiSettingsState {
   /** 0 = lowest risk / reward, 100 = highest. Drives the agent's structure choice. */
   riskAppetite: number
-  /** Whether AI-drafted orders wait for a human tap or fire when criteria hit. */
+  /** Whether AI-drafted orders wait for a human tap. Not server-enforced. */
   approvalMode: ApprovalMode
   /** Ceiling for a single AI-initiated position, as % of buying power. */
   maxAllocationPct: number
   tradingWindow: TradingWindow
-  /** Day-loss circuit breaker: the agent stands down past this drawdown. 0 = off. */
+  /**
+   * Day-loss circuit breaker, in percent. 0 = off.
+   *
+   * Nothing can trip this yet: there is no server-side day-P&L measurement
+   * surface to evaluate it against (HKP-AI-8).
+   */
   circuitBreakerPct: number
   setRiskAppetite: (value: number) => void
   setApprovalMode: (value: ApprovalMode) => void

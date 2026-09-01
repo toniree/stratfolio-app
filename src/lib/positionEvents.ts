@@ -40,11 +40,17 @@ export function isPlanEvent(kind: PositionEventKind): boolean {
 /**
  * The position's audit trail, projected onto its price history.
  *
- * Fills are synthesised deterministically from the position id — this is a
- * demo book with no order history behind it — while plan events are taken
- * from the user's real saved plans. Every derived figure (slippage, VWAP gap,
- * realised P/L) is computed from the same series the chart draws, so a marker
- * can never disagree with the line it sits on.
+ * Two very different kinds of marker live here, and they are now gated apart
+ * (plan §6, "synthesized fills/order IDs" removed from live views):
+ *
+ * - **Real** markers come from the position and the user's saved plans: the
+ *   opening fill (its time, size and average cost are recorded facts) and
+ *   plan lifecycle events.
+ * - **Synthetic** markers — scale-ins, trims, order ids, slippage and VWAP
+ *   gap — are deterministic fiction for the demo book, which has no order
+ *   history behind it. They render only when the position itself is mock
+ *   data. A live position shows its real opening fill and nothing invented;
+ *   real fill history arrives with the order seam.
  */
 export function positionEvents(
   position: Position,
@@ -53,6 +59,10 @@ export function positionEvents(
 ): PositionEvent[] {
   if (history.length < 4) return []
 
+  // Synthetic markers exist only for the demo book. A live position's
+  // provenance is `live`, and inventing scale-ins and order ids for a real
+  // holding would put fabricated fills in an audit trail.
+  const synthetic = position.provenance === 'mock' || position.provenance === undefined
   const rand = mulberry32(hashString(`${position.id}:events`))
   const multiplier = contractMultiplier(position)
   const unit = position.assetType === 'option' ? 'contracts' : 'shares'
@@ -82,8 +92,10 @@ export function positionEvents(
       label: 'Notional',
       value: formatMoney(position.avgCost * position.quantity * multiplier, { whole: true }),
     },
-      ...executionQuality(rand, position.avgCost, openPoint.value),
-      { label: 'Order', value: orderId(rand) },
+      // Slippage, VWAP gap and an order id are all fiction — the backend has
+      // no fill-quality record and plt's order ids are not these.
+      ...(synthetic ? executionQuality(rand, position.avgCost, openPoint.value) : []),
+      ...(synthetic ? [{ label: 'Order', value: orderId(rand) }] : []),
       ...(entryPlan
         ? [
             { label: 'Entry plan', value: entryPlan.source === 'ai' ? 'StratFolio AI' : 'You' },
@@ -99,7 +111,8 @@ export function positionEvents(
   })
 
   // ---- Scale-ins and trims ----------------------------------------------
-  const fillCount = 1 + Math.floor(rand() * 3)
+  // Entirely invented: the app has no scale-in/trim history for any position.
+  const fillCount = synthetic ? 1 + Math.floor(rand() * 3) : 0
   const window = history.length - openIndex - 2
   for (let i = 0; i < fillCount && window > 4; i++) {
     const index = openIndex + 2 + Math.floor(((i + 1) / (fillCount + 1)) * window)

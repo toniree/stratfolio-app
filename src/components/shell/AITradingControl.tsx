@@ -134,9 +134,16 @@ export function AITradingControl({
                   onChrome ? 'text-white/70' : 'text-ink-muted',
                 )}
               >
+                {/* No autonomous entry loop exists anywhere in the backend
+                    (HKP-XSV-1): bkt's monitor scans only OPEN positions and
+                    entry happens solely on an explicit POST. Promising
+                    automatic execution described a feature nothing
+                    implements. This toggle governs whether the AI may draft
+                    and submit plans at all — and even that is client-side
+                    until HKP-AI-8 enforces it server-side. */}
                 {enabled
-                  ? 'AI and user plans execute automatically at their triggers.'
-                  : 'Only plans you created by hand or explicitly approved will execute automatically.'}
+                  ? 'The model may draft plans for you. Nothing enters a position without an explicit action.'
+                  : 'The model will not draft plans. Nothing enters a position without an explicit action.'}
               </p>
             ) : null}
           </div>
@@ -214,8 +221,8 @@ function AITradingConfirmation({
           </p>
           <p className="mt-0.5 text-[9.5px] leading-snug text-ink-muted">
             {enabled
-              ? 'All active plans can execute automatically.'
-              : 'Only plans you created by hand or approved will execute automatically.'}
+              ? 'The model may draft plans. Entry always needs an explicit action.'
+              : 'The model will not draft plans.'}
           </p>
         </div>
       </div>
