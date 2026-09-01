@@ -1,0 +1,11 @@
+---
+description: StratFolio app entry point — shared policy and the backend-hookup plan of record
+globs: *
+alwaysApply: true
+---
+# StratFolio App Rules
+
+- Read repository-root `AGENTS.md` first; it is the single agent entry point for this repo.
+- Shared engineering policy (contracts, definition of done, determinism, proof cadence) lives in `../stratfolio/.cursor/rules/` and applies to this repo.
+- Active plan of record: `docs/plans/BACKEND_HOOKUP_V1_PLAN.md` (app) + `../stratfolio/docs/plans/APP_HOOKUP_BACKEND_GAPS_V1.md` (backend gaps). Both DRAFT — review per their final sections before implementing against them.
+- V1 is silent/paper trading only; keep the per-domain mock/live swap at `src/api/index.ts` intact.
