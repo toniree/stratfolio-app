@@ -494,3 +494,62 @@ plt `GET /api/v1/silent-trades/01a05b9c-26a5-746a-840e-bb742be86a2b` → **`stat
 #### Backend follow-ups (recorded, not app defects)
 1. **bkt exits `replayed` body flag** — on idempotent replay of `POST /executions/exits`, HTTP is **200** but the response body's `replayed` field stays **`false`** (both attempts returned `replayed: false`). The app's `toOrderFromExit` derives replay from HTTP status, not the body; backend `outcome_from_record` never sets the wire flag on the exits route.
 2. **plt strict-boolean vs bkt string-tolerant kill-switch parsing** — plt `PUT /api/v1/config/policy.ai_trading_enabled` rejects non-boolean values with **422** (`CONFIG_VALUE_INVALID`), so the app cannot store `"true"`/`"false"` strings via the settings modal. bkt §17 accepts string spellings when read directly from config. Exposure is **direct-DB-write only**; no app-path mismatch observed in this pass.
+
+---
+
+## APP-122 — DONE (verified)
+
+**Date:** 2026-09-01  
+**Branch:** `backend-hookup` @ `8fb79f9`  
+**Agent:** Cursor verification pass  
+**Plan:** `docs/plans/BACKEND_HOOKUP_V1_PLAN.md` (APP-122 research page → real backtests)
+
+### Summary
+
+| Check | Result |
+|---|---|
+| 1. `npx tsc -b` | **PASS** (exit 0) |
+| 2. `npx vitest run` | **PASS** — 70 files, **513** tests |
+| 3. `npm run build` | **PASS** (exit 0; chunk-size warning only) |
+| 4. `npx oxlint src` | **PASS** (exit 0, no errors) |
+| 5. Live smoke — backend stack + Vite proxy | **PASS** — see below |
+
+**Overall: APP-122 verification PASSED** (static suite + live proxy smoke).
+
+### Static / suite evidence
+
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npx tsc -b && npx vitest run && npm run build && npx oxlint src
+# vitest: 70 files, 513 passed; build + oxlint exit 0
+```
+
+### Live smoke evidence (2026-09-01)
+
+Backend stack per prior passes: `make up` / `make wait-db` / `make migrate` (ai alembic **0021_decision_tape**); mnd REPLAY `synthetic-v1` via admin API (`load`/`speed`/`start`); plt + bkt (`BKT_USE_REAL_PEERS=true`, `BKT_MAX_QUOTE_AGE_SECONDS=2400`) + ai healthy.
+
+App `.env`: `VITE_DATA_RESEARCH=live` (other domains mock per `src/api/http/env.ts`). `npm run dev` on `:5173`.
+
+Preset wire replicated verbatim from `src/api/http/adapters/backtest.ts` (`long-call-delta-band` / `DELTA_BAND`):
+
+| Step | Result |
+|---|---|
+| `POST /bkt/api/v1/backtests` via Vite proxy | **202** `{id, status:PENDING}` |
+| Poll `GET /bkt/api/v1/backtests/{id}` (direct bkt) | **COMPLETED** |
+| `fill_protocol` | **`two_quote_band`** |
+| `metrics.execution` block | **present** |
+| `by_delta_bucket` / `by_ticker` / `by_exit_reason` | **present** |
+| Decimal fields (`total_pnl`, etc.) | **JSON strings** (`total_pnl='0'` on thin synthetic window) |
+
+Direct bkt POST (same adapter shape, no proxy) also **COMPLETED** with identical evidence fields.
+
+#### Limitations
+
+- Synthetic-v1 window `2026-06-01`→`2026-06-05` produced **0 filled trades** (`total_pnl='0'`) — expected on a thin replay slice; evidence panels decode correctly, buckets present but thin.
+- bkt `POST /backtests` returns **202** + poll pattern required (not 200 inline result); app timeout uses `VITE_BACKTEST_TIMEOUT_MS` (default 300s).
+
+#### Cleanup performed
+
+- Vite dev server stopped
+- mnd, plt, bkt, ai processes stopped
+- Verification `.env` removed from app repo
+- Docker compose stack **left running**
