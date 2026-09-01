@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_MARKET_SYMBOLS,
+  backtestTimeoutMs,
   chainPollMs,
   dataMode,
   hasLiveDomain,
@@ -18,6 +19,7 @@ describe('per-domain data mode (D2)', () => {
     expect(dataMode('universe', env)).toBe('mock')
     expect(dataMode('news', env)).toBe('mock')
     expect(dataMode('market', env)).toBe('mock')
+    expect(dataMode('research', env)).toBe('mock')
     expect(hasLiveDomain(env)).toBe(false)
   })
 
@@ -37,6 +39,23 @@ describe('per-domain data mode (D2)', () => {
     // One live domain is enough to make the global "everything is simulated"
     // claim false (D10).
     expect(hasLiveDomain(env)).toBe(true)
+  })
+})
+
+describe('research backtests (APP-122)', () => {
+  it('has its own flag: the desk does not go live with the portfolio', () => {
+    expect(isLive('research', { VITE_DATA_PORTFOLIO: 'live' })).toBe(false)
+    expect(isLive('research', { VITE_DATA_RESEARCH: 'live' })).toBe(true)
+    expect(hasLiveDomain({ VITE_DATA_RESEARCH: 'live' })).toBe(true)
+  })
+
+  it('gives the synchronous backtest POST a budget of its own', () => {
+    // The general budget would abort a request bkt is still honestly working
+    // on — and an aborted POST throws away the id of a run that happened.
+    expect(requestTimeoutMs({})).toBe(15_000)
+    expect(backtestTimeoutMs({})).toBe(300_000)
+    expect(backtestTimeoutMs({ VITE_BACKTEST_TIMEOUT_MS: '60000' })).toBe(60_000)
+    expect(backtestTimeoutMs({ VITE_BACKTEST_TIMEOUT_MS: 'soon' })).toBe(300_000)
   })
 })
 

@@ -172,6 +172,48 @@ describe('§3.3 — the client-side planner heuristics (APP-113)', () => {
   })
 })
 
+describe('§3.7 — the research desk (APP-122)', () => {
+  it('the deterministic backtest engine lives only in the mock binding', () => {
+    // `simulateRun()` shaped a CAGR, a Sharpe and an equity curve out of a
+    // hash of the run's own configuration. It is a fine demo and it is not a
+    // backtest, so it exists in exactly one file — the mock seam — and the
+    // page that used to call it no longer can.
+    const declaring = ALL.filter((file) => /export function simulateRun/.test(read(file)))
+    expect(declaring.map(rel)).toEqual(['api/mock/MockResearchApi.ts'])
+
+    for (const file of [
+      join(SRC, 'routes/ResearchPage.tsx'),
+      join(SRC, 'store/researchStore.ts'),
+      join(SRC, 'components/research/BacktestRunCard.tsx'),
+    ]) {
+      // `code()`, not `read()`: these files explain in prose why the demo
+      // engine moved, and an explanation must not be a violation.
+      expect(code(file), `${rel(file)} still runs the demo engine`).not.toMatch(/simulateRun/)
+    }
+  })
+
+  it('the live research adapter fabricates nothing', () => {
+    for (const file of [
+      join(SRC, 'api/http/HttpResearchApi.ts'),
+      join(SRC, 'api/http/adapters/backtest.ts'),
+    ]) {
+      const source = read(file)
+      expect(source, `${rel(file)} imports demo fixtures`).not.toMatch(/from '@\/api\/mock\//)
+      expect(source, `${rel(file)} uses a PRNG`).not.toMatch(/mulberry32|Math\.random/)
+      // Missing stays missing: a `?? 0` in this layer would turn bkt's
+      // deliberate nulls — a withheld ratio, an absent refusal rate — into
+      // measurements (D4/§19.4).
+      expect(source, `${rel(file)} defaults a wire value to zero`).not.toMatch(/\?\?\s*0\b/)
+    }
+  })
+
+  it('the shadow tape is confined to demo plans', () => {
+    const source = read(join(SRC, 'routes/ResearchPage.tsx'))
+    expect(source).toMatch(/if \(live\) return null/)
+    expect(source).toMatch(/plan\.provenance === 'mock'/)
+  })
+})
+
 describe('§6 / D10 — the global simulated claim', () => {
   it('the demo badge is conditional on the whole build being mocked', () => {
     const source = read(join(SRC, 'components/shell/DemoBadge.tsx'))

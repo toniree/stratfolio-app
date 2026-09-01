@@ -7,6 +7,7 @@ import type {
   NewsApi,
   PlannerApi,
   PortfolioApi,
+  ResearchApi,
 } from '@/api/portfolioApi'
 import { mockPortfolioApi } from '@/api/mock/MockPortfolioApi'
 import { mockIdeasApi } from '@/api/mock/MockIdeasApi'
@@ -15,12 +16,14 @@ import { mockPlannerApi } from '@/api/mock/MockPlannerApi'
 import { mockAuthApi } from '@/api/mock/MockAuthApi'
 import { mockAssistantApi } from '@/api/mock/MockAssistantApi'
 import { mockActiveUniverseApi } from '@/api/mock/MockActiveUniverseApi'
+import { mockResearchApi } from '@/api/mock/MockResearchApi'
 import { httpPortfolioApi } from '@/api/http/HttpPortfolioApi'
 import { httpIdeasApi } from '@/api/http/HttpIdeasApi'
 import { httpPlannerApi } from '@/api/http/HttpPlannerApi'
 import { httpActiveUniverseApi } from '@/api/http/HttpActiveUniverseApi'
 import { httpExecutionPolicyApi } from '@/api/http/HttpExecutionPolicyApi'
 import { httpMarketDataApi } from '@/api/http/HttpMarketDataApi'
+import { httpResearchApi } from '@/api/http/HttpResearchApi'
 import { marketDataSimulator } from '@/api/marketData/MarketDataSimulator'
 import { PollingQuoteProvider } from '@/api/marketData/PollingQuoteProvider'
 import type { MarketDataApi, QuoteProvider } from '@/api/marketData/types'
@@ -93,6 +96,18 @@ export const plannerApi: PlannerApi = isLive('planner') ? httpPlannerApi : mockP
 export const executionPolicyApi: ExecutionPolicyApi | null = isLive('portfolio')
   ? httpExecutionPolicyApi
   : null
+
+/**
+ * Research — bkt backtests (APP-122, Wave C).
+ *
+ * Live mode runs the real engine: the library prunes to the presets bkt's V1
+ * universe can express, and the deterministic in-browser engine
+ * (`simulateRun`) is confined to the mock binding, where every run it produces
+ * is labelled simulated (§6). The two modes report different quantities and
+ * say which is which — bkt reports realised P/L, a fill rate and §19 execution
+ * evidence; the demo engine reports a shaped CAGR and equity curve.
+ */
+export const researchApi: ResearchApi = isLive('research') ? httpResearchApi : mockResearchApi
 
 // Blocked on backend capability, or on a later wave — see `.env.example` and
 // `../stratfolio/docs/plans/APP_HOOKUP_BACKEND_GAPS_V1.md`.

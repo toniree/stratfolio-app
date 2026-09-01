@@ -15,6 +15,7 @@ export type DataDomain =
   | 'assistant'
   | 'universe'
   | 'market'
+  | 'research'
 
 export type DataMode = 'mock' | 'live'
 
@@ -41,6 +42,7 @@ const FLAG: Record<DataDomain, string> = {
   assistant: 'VITE_DATA_ASSISTANT',
   universe: 'VITE_DATA_UNIVERSE',
   market: 'VITE_DATA_MARKET',
+  research: 'VITE_DATA_RESEARCH',
 }
 
 type EnvBag = Record<string, string | boolean | undefined>
@@ -125,4 +127,22 @@ export function requestTimeoutMs(env: EnvBag = readEnv()): number {
   const raw = env.VITE_API_TIMEOUT_MS
   const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 15_000
+}
+
+/**
+ * Timeout for `POST /api/v1/backtests` (APP-122, §7.6 footgun).
+ *
+ * bkt answers that route `202 {id}` — the shape of a submission — but runs the
+ * whole walk **inside the request** (`api/backtests.py`: "bounded, synchronous
+ * in V1"), baselines and a 200-draw Monte Carlo included. The 15s default
+ * budget would abort a request the server is still honestly working on, and an
+ * aborted POST leaves a run that ran and can never be read back: the id only
+ * arrives in the response. Hence a separate, much longer budget, and a client
+ * that polls `GET` immediately rather than waiting on a status that is already
+ * final by the time the POST returns.
+ */
+export function backtestTimeoutMs(env: EnvBag = readEnv()): number {
+  const raw = env.VITE_BACKTEST_TIMEOUT_MS
+  const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 300_000
 }

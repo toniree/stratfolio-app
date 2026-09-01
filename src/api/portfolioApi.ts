@@ -145,6 +145,38 @@ export interface ExecutionPolicyApi {
   setTradingWindow(window: TradingWindow): Promise<void>
 }
 
+/**
+ * Research — backtests over service-bkt (APP-122).
+ *
+ * Three methods rather than one `runBacktest()`, because bkt's lifecycle has
+ * three distinct facts in it and collapsing them loses one:
+ *
+ *  - `submitRun` returns the run id. `POST /api/v1/backtests` answers `202
+ *    {id}` but runs the whole walk in-request (§7.6), so by the time the id
+ *    arrives the run is already final — and that response is **the only place
+ *    the id ever appears**. Losing it loses the run.
+ *  - `getRun` reads status + result. Polled immediately, not on a timer.
+ *  - `getRuns` is what the seam can list *without* the user queueing anything.
+ *    bkt has no list-backtests route at all (`api/backtests.py` defines POST
+ *    and GET-by-id and nothing else), so the live implementation answers `[]`
+ *    and `canListPastRuns` is false: the desk shows this session's runs and
+ *    says why, instead of implying an empty research history.
+ */
+export interface ResearchApi {
+  /** What a run from this seam *is* (D10) — `live` for bkt, `mock` for the
+   *  in-browser demo engine. The card labels itself from this, so the two can
+   *  never be mistaken for each other on the same desk. */
+  readonly provenance: import('@/api/types').Provenance
+  /** False when the backend cannot enumerate past runs, so the UI can say so
+   *  rather than render an empty list as "no research has ever been run". */
+  readonly canListPastRuns: boolean
+  getRuns(): Promise<import('@/api/researchTypes').BacktestRunView[]>
+  submitRun(
+    input: import('@/api/researchTypes').QueueBacktestInput,
+  ): Promise<{ id: string }>
+  getRun(id: string): Promise<import('@/api/researchTypes').BacktestRunProgress | undefined>
+}
+
 export interface AddUniverseSymbolInput {
   source: 'USER' | 'AI' | 'NEWS' | 'SYSTEM'
   pinned?: boolean

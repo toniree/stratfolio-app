@@ -13,6 +13,12 @@ import {
   WATCHLIST_CAPACITY_FIXTURE,
   WATCHLIST_FIXTURE,
 } from '@/test/msw/fixtures/plt'
+import {
+  BACKTEST_COMPLETED_FIXTURE,
+  BACKTEST_FAILED_FIXTURE,
+  BACKTEST_ID,
+  BACKTEST_LEGACY_FIXTURE,
+} from '@/test/msw/fixtures/bkt'
 
 /**
  * Default happy-path handlers for the plt routes Wave A consumes.
@@ -152,6 +158,30 @@ export const bktHandlers = [
   http.post(`${BKT}/executions`, () =>
     HttpResponse.json(EXECUTION_FILLED_FIXTURE, { status: 201 }),
   ),
+
+  // Backtests (APP-122). The POST is 202-but-synchronous, so the default pair
+  // is "submitted" followed by a run that is already COMPLETED — which is what
+  // a client polling immediately actually sees. Legacy, failed and 422 runs are
+  // per-test overrides.
+  http.post(`${BKT}/backtests`, () =>
+    HttpResponse.json({ id: BACKTEST_ID, status: 'PENDING' }, { status: 202 }),
+  ),
+
+  http.get(`${BKT}/backtests/:id`, ({ params }) => {
+    const run = [
+      BACKTEST_COMPLETED_FIXTURE,
+      BACKTEST_LEGACY_FIXTURE,
+      BACKTEST_FAILED_FIXTURE,
+    ].find((candidate) => candidate.id === params.id)
+    return run
+      ? HttpResponse.json(run)
+      : problem(404, {
+          type: 'https://stratfolio.local/problems/not-found',
+          title: 'Not found',
+          status: 404,
+          detail: `backtest ${String(params.id)} not found`,
+        })
+  }),
 
   // The user's own exit (APP-114, §17). The default is a fill; NO_FILL, the
   // 200 replay and the 404/409/503 refusals are per-test overrides for the
