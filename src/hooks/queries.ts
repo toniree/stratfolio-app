@@ -13,6 +13,7 @@ export const queryKeys = {
     ['performance', accountId, period] as const,
   ideas: ['ideas'] as const,
   activity: ['activity'] as const,
+  orders: ['orders'] as const,
   news: ['news'] as const,
   article: (id: string) => ['news', id] as const,
   plannerIdeas: ['planner-ideas'] as const,
@@ -59,6 +60,17 @@ export function useActivity() {
   return useQuery({ queryKey: queryKeys.activity, queryFn: () => portfolioApi.getActivity() })
 }
 
+/**
+ * Order history.
+ *
+ * In live mode this is a merge of plt silent trades, pending/rejected trade
+ * plans, and session-retained bkt outcomes that left no durable row
+ * (HKP-BKT-4) — so it is a real query, not a read of local state.
+ */
+export function useOrders() {
+  return useQuery({ queryKey: queryKeys.orders, queryFn: () => portfolioApi.getOrders() })
+}
+
 export function useNewsArticles() {
   return useQuery({ queryKey: queryKeys.news, queryFn: () => newsApi.getArticles() })
 }
@@ -81,8 +93,18 @@ export function useSubmitOrder() {
     mutationFn: (request: OrderRequest) => portfolioApi.submitOrder(request),
     // User-submitted orders confirm inside the ticket. Header acknowledgements
     // are reserved for orders initiated by automation or AI.
+    //
+    // A submit can change the whole system of record — a fill creates a
+    // position, moves cash and cost basis, appends activity, and adds an
+    // order row; a NO_FILL or REJECTED still adds an order row and an
+    // activity entry. Invalidating only activity left positions and the
+    // portfolio hero stale after a fill.
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['positions'] })
+      void qc.invalidateQueries({ queryKey: ['portfolio-meta'] })
+      void qc.invalidateQueries({ queryKey: ['performance'] })
       void qc.invalidateQueries({ queryKey: queryKeys.activity })
+      void qc.invalidateQueries({ queryKey: queryKeys.orders })
     },
   })
 }
@@ -95,7 +117,9 @@ export function useAddIdeaToPortfolio(accountId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['positions'] })
       void qc.invalidateQueries({ queryKey: ['portfolio-meta'] })
+      void qc.invalidateQueries({ queryKey: ['performance'] })
       void qc.invalidateQueries({ queryKey: queryKeys.activity })
+      void qc.invalidateQueries({ queryKey: queryKeys.orders })
     },
   })
 }

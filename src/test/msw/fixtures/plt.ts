@@ -8,9 +8,20 @@
  * entirely rather than sent as `null` (§7.2). Fixtures that "helpfully" fill in
  * `unrealized_pnl: 0` or `last_price: 0` would test a backend that does not
  * exist — plt never marks an open position to market.
+ *
+ * Each is typed against the wire interface, so a fixture that drifts from the
+ * pinned DTO fails the typecheck rather than quietly testing a shape plt never
+ * sends.
  */
+import type {
+  PltActivity,
+  PltPortfolio,
+  PltPosition,
+  PltSilentTrade,
+  PltTradePlan,
+} from '@/api/http/wire/plt'
 
-export const PORTFOLIO_FIXTURE = {
+export const PORTFOLIO_FIXTURE: PltPortfolio = {
   id: '2f1d0c9e-3a4b-4c5d-8e9f-0a1b2c3d4e5f',
   account_key: 'paper-default',
   starting_capital: 100000.0,
@@ -34,7 +45,7 @@ export const PORTFOLIO_FIXTURE = {
 
 /** An open long call. No `last_price` / `market_value` / `unrealized_pnl`:
  *  plt writes marks only at entry and close (`PortfolioService.java`). */
-export const POSITION_OPEN_FIXTURE = {
+export const POSITION_OPEN_FIXTURE: PltPosition = {
   id: '8b7a6c5d-4e3f-4a2b-9c8d-7e6f5a4b3c2d',
   portfolio_id: PORTFOLIO_FIXTURE.id,
   silent_trade_id: 'aa11bb22-cc33-4d44-8e55-ff66aa77bb88',
@@ -56,7 +67,7 @@ export const POSITION_OPEN_FIXTURE = {
 
 /** A second open position that carries no decision episode at all — the common
  *  case, and the one that must render with no AI block rather than a fake one. */
-export const POSITION_NO_EPISODE_FIXTURE = {
+export const POSITION_NO_EPISODE_FIXTURE: PltPosition = {
   id: '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5a',
   portfolio_id: PORTFOLIO_FIXTURE.id,
   silent_trade_id: 'bb22cc33-dd44-4e55-9f66-aa77bb88cc99',
@@ -75,10 +86,11 @@ export const POSITION_NO_EPISODE_FIXTURE = {
   opened_at: '2026-08-28T15:10:44Z',
 }
 
-export const POSITIONS_FIXTURE = [POSITION_OPEN_FIXTURE, POSITION_NO_EPISODE_FIXTURE]
+export const POSITIONS_FIXTURE: PltPosition[] = [POSITION_OPEN_FIXTURE, POSITION_NO_EPISODE_FIXTURE]
 
-export const SILENT_TRADE_OPEN_FIXTURE = {
-  id: POSITION_OPEN_FIXTURE.silent_trade_id,
+export const SILENT_TRADE_OPEN_FIXTURE: PltSilentTrade = {
+  // Ties this trade to POSITION_OPEN_FIXTURE.silent_trade_id.
+  id: 'aa11bb22-cc33-4d44-8e55-ff66aa77bb88',
   trade_plan_id: '99887766-5544-4332-8211-000fedcba987',
   ticker: 'MU',
   occ_symbol: 'MU270115C00150000',
@@ -100,7 +112,7 @@ export const SILENT_TRADE_OPEN_FIXTURE = {
   updated_at: '2026-08-24T13:45:02Z',
 }
 
-export const SILENT_TRADE_CLOSED_FIXTURE = {
+export const SILENT_TRADE_CLOSED_FIXTURE: PltSilentTrade = {
   id: 'cc33dd44-ee55-4f66-8a77-bb88cc99dd00',
   trade_plan_id: '11223344-5566-4778-899a-bbccddeeff00',
   ticker: 'WMT',
@@ -124,10 +136,10 @@ export const SILENT_TRADE_CLOSED_FIXTURE = {
   updated_at: '2026-08-14T18:02:19Z',
 }
 
-export const SILENT_TRADES_FIXTURE = [SILENT_TRADE_CLOSED_FIXTURE, SILENT_TRADE_OPEN_FIXTURE]
+export const SILENT_TRADES_FIXTURE: PltSilentTrade[] = [SILENT_TRADE_CLOSED_FIXTURE, SILENT_TRADE_OPEN_FIXTURE]
 
 /** A validated plan that has not executed — a pending intent in order history. */
-export const TRADE_PLAN_VALIDATED_FIXTURE = {
+export const TRADE_PLAN_VALIDATED_FIXTURE: PltTradePlan = {
   id: 'aabbccdd-eeff-4011-8223-344556677889',
   thesis_id: '77665544-3322-4110-8fee-ddccbbaa9988',
   ticker: 'NVDA',
@@ -157,7 +169,7 @@ export const TRADE_PLAN_VALIDATED_FIXTURE = {
 }
 
 /** A rejected plan. `rejection_reasons` may repeat a code (§7.5). */
-export const TRADE_PLAN_REJECTED_FIXTURE = {
+export const TRADE_PLAN_REJECTED_FIXTURE: PltTradePlan = {
   id: '55667788-99aa-4bbc-8dde-112233445566',
   ticker: 'COIN',
   option_type: 'PUT',
@@ -179,7 +191,7 @@ export const TRADE_PLAN_REJECTED_FIXTURE = {
 }
 
 /** A legacy plan: the structured-exit fields are absent entirely, not zero. */
-export const TRADE_PLAN_LEGACY_FIXTURE = {
+export const TRADE_PLAN_LEGACY_FIXTURE: PltTradePlan = {
   id: 'deadbeef-0000-4111-8222-333344445555',
   ticker: 'AMD',
   option_type: 'CALL',
@@ -195,13 +207,13 @@ export const TRADE_PLAN_LEGACY_FIXTURE = {
   updated_at: '2026-06-20T13:00:00Z',
 }
 
-export const TRADE_PLANS_FIXTURE = [
+export const TRADE_PLANS_FIXTURE: PltTradePlan[] = [
   TRADE_PLAN_REJECTED_FIXTURE,
   TRADE_PLAN_VALIDATED_FIXTURE,
   TRADE_PLAN_LEGACY_FIXTURE,
 ]
 
-export const ACTIVITY_FIXTURE = [
+export const ACTIVITY_FIXTURE: PltActivity[] = [
   {
     id: 'f0e1d2c3-b4a5-4968-8778-695a4b3c2d1e',
     ts: '2026-08-30T17:20:00Z',
