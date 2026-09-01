@@ -81,3 +81,92 @@ The backtest and MND/news capability claims checked above are accurate.
 ### Overall recommendation
 
 **Rework.** The silent-trading safety boundary is correct, and several backend capability assessments are accurate, but the current plan cannot be implemented without violating its own no-fabrication rule. Correct the mapping errors, redesign the view types and open-order input/state machine, make idempotency endpoint-specific and retry-stable, move market/provenance work ahead of trading writes, and resolve the mock-demo deletion contradiction before accepting the wave plan.
+
+## Cursor review — 2026-08-31 (rev 2)
+
+Code treated as ground truth. Verified rev-2 corrections against Codex's rev-1 findings (not re-litigated) and spot-checked app `src/` plus `service-plt` DTOs/controllers, `service-bkt` api/execution, `service-ai` `app.py`/`cycle.py`/`episodes.py`, and `service-mnd` proto/HTTP mux. Backend HEAD at review time is `6f4bc2b` on `app-hookup` (plan header still cites `954d738` — ancestor of current HEAD; service claims below still hold).
+
+### §9 checklist verdicts
+
+1. **Contract truth — PASS (rev-2 corrections hold); two residual mapping gaps remain.**
+
+   Spot-checks of the Codex-corrected rows:
+
+   - `getMeta`: `totalDeposited → open_positions_cost_basis` matches app semantics (`src/api/types.ts:108-113`, `MockPortfolioApi.ts:121-128`) and `PortfolioResponse.openPositionsCostBasis` (`../stratfolio/service-plt/.../PortfolioResponse.java:14-23` + Jackson `SNAKE_CASE` at `application.yml:41-42`). `cash`/`buyingPower → cash_balance` is an explicit product decision, not a field mix-up.
+   - Activity: wire field is `action_type` (`ActivityResponse.java:9-17` + SNAKE_CASE). `ActionType` roster is far broader than the app's four kinds (`ActionType.java:7-33` vs `src/api/types.ts:174-181`); complete map + `other` fallback is required as stated.
+   - Theses / plans: `ThesisResponse` / `TradePlanResponse` field sets match the rev-2 description (`ThesisResponse.java:12-29`, `TradePlanResponse.java:13-86`). Neither DTO can feed frozen `Idea` / `PlannerIdea`; `ThesisView` / `PlanView` is the correct escape.
+   - Open order / execution: `CreateTradePlanRequest` still requires full option identity + modes (`CreateTradePlanRequest.java:36-85`); BKT body idempotency + `FILLED`/`NO_FILL` on 201 confirmed (`executions.py:70-87`, `engine.py:121-160`); PLT header idempotency confirmed (`TradePlanController.java:54-67`).
+   - `decision-cycles/run` paper-executes: `cycle.py:2924-3041` submits to plt then calls bkt `execute` — composer re-scope is correct.
+
+   Residual (neither Codex nor rev 2 called out cleanly):
+
+   - **`getOrders()` merge is underspecified and partly unservable.** BKT has no list-executions route — only `GET .../by-plan/{id}` and `GET .../{execution_id}` (`executions.py:145-189`). `NO_FILL` leaves no silent-trade row, so "plt silent-trades + open trade-plans + bkt outcomes" either needs an N+1 by-plan fan-out over VALIDATED plans, client-retained submit responses, or a new BKT list gap. Status PARTIAL is right; the adapter contract is not yet implementable as written.
+   - **Confidence scale:** contracts bind thesis/plan `confidence` as **0..1** (`BACKEND_V1_SERVICE_CONTRACTS.md` § theses); app `AIAssessment.conviction` is **0–100** (`src/api/types.ts:29-31`). Missing from §7 footguns — easy silent 100× display bug when mapping episode/thesis confidence.
+
+2. **Accidental-live-trading audit — PASS, with one Wave-C gate and broader copy cleanup.**
+
+   Waves A–B only name PLT trade-plan / silent-trade and BKT execution paths. PolicyGate rejects non-silent `execution_mode` (`PolicyGate.java:101-104`). BKT has no brokerage route (`app.py` routers are executions/monitor/backtests/experiments). Wave C's `decision-cycles/run` exposure is correctly blocked on HKP-AI-8 + explicit paper-execution labeling (`app.py:447`, `cycle.py:3001-3041`).
+
+   Keep: ticket must **hard-send** `execution_mode=silent` (and an allowlisted `risk_profile`) — do not trust UI free-text. Also remove auto-execution promises beyond the cited ticker: `AITradingControl.tsx:138-139,217-218` and `PlannerPage.tsx:81` still claim plans "execute automatically" — same HKP-XSV-1 lie as `UpcomingTradePlans.tsx:565`.
+
+3. **D3 view-model revision — PASS directionally; incomplete inventory of required-but-unservable fields.**
+
+   Rev 2 correctly unfreezes types: optional `ai?`, criteria `unknown`, `NO_FILL` / `platform_error`, paper-account identity, provenance (D10). That addresses Codex's core rejection.
+
+   Still required today and still unservable without fabrication or further view-model cuts:
+
+   - `Position.brokerageId` / `Order.brokerageId` / six `BrokerageId`s (`src/api/types.ts:4-21,72-88,161-172`) — D3 mentions paper-account identity but does not explicitly drop brokerage from position/order view models; live mode will otherwise invent a brokerage.
+   - `Position.company` / `Idea.company` / `Order.company` — DTOs have ticker only. Plan's "local symbol map until HKP-MND-4" has **no live-safe map**: company names live in mock seed (`seededData.ts`, `seededOptionsBook.ts`). Importing those into `Http*Api` would violate §6. Prefer `company?: string` (ticker fallback) until HKP-MND-4.
+   - `Idea.ai` remains required (`types.ts:126-147`) — covered by ThesisView, but every current consumer (`RecTile`, `IdeaCard`, `RecDetailsPage`, …) still assumes it; blast radius is larger than the few files listed in §5.
+   - `PlannerIdea` absolute `targetLow`/`targetHigh`/`stop`/`expectedUpsidePct`/`author`/`title` (`newsTypes.ts:39-80`) — PlanView covers; status map must include backend `PROPOSED|VALIDATED|REJECTED|EXECUTED|CANCELLED` (`TradePlanStatus.java:4-9`), not only the app's `draft|watching|ready`.
+
+4. **Wave B0 placement — AGREE; start after Wave A once HKP-MND-1 lands.**
+
+   App boots `MarketDataSimulator` unconditionally (`App.tsx:30-32`); BKT independently quotes MND for fills (`engine.py` option selection). Shipping APP-112 before live chain/quotes guarantees ticket/mark divergence. HKP-MND-1 is DECIDED; no reason B0 cannot follow A immediately when the facade exists. Chain-history deferral is correctly mirrored. Provenance labeling (`common.proto:48-64`) remains mandatory — "from mnd" ≠ real.
+
+5. **Idempotency design (D6) — PASS, with one semantic clarification.**
+
+   Endpoint-specific + retry-stable keys match code: PLT header (`TradePlanController.java:54-67`), BKT body (`executions.py:70-87`). BKT replay: same `(trade_plan_id, idempotency_key)` returns recorded FILLED/NO_FILL/REJECTED without re-simulating (`executions.py:28-36,123-135`); a **new** key after NO_FILL/REJECTED may simulate again.
+
+   Clarification for APP-112: "retry after timeout" reuses the key; "user clicked try again after NO_FILL" is a **new logical operation** and must mint a new key. Document that in the ticket state machine so D6 is not read as "one key forever per plan."
+
+6. **§6 fabrication policy — PASS for demo confinement; APP-103 and company-map are leak risks.**
+
+   Mock-only retention of forced plans / MSFT easter egg / scripted orders resolves Codex's delete-vs-byte-identical contradiction. Live adapters must not import `seededData` / `EXAMPLE_ORDERS` / `REQUIRED_DEMO_PLAN_IDS`.
+
+   Leak vectors still open in the plan text:
+
+   - **APP-103 conflates two different "watchlists".** App `Watchlist.tsx` is a local terminal tape (`DEFAULT_WATCHLIST = SYMBOLS.slice(0, 20)`, in-component state — `Watchlist.tsx:11-24`). PLT `/api/v1/watchlist*` is **ActiveUniverse** membership with capacity/pinning/AI promotion (`WatchlistController.java:42-72`, contracts §10). Wiring the terminal rail to ActiveUniverse would either dump ~73 DEFAULT_PINNED symbols into the UI or let casual add/remove mutate the AI universe. Treat APP-103 as a dedicated ActiveUniverse surface (or defer); keep the terminal rail LOCAL (or mnd-backed quotes only) until product decides.
+   - Company names from mock seed (item 3) — same confinement rule.
+
+7. **Proof criteria — PASS for Wave B submit path; insufficient alone for `getOrders` history.**
+
+   FILLED + NO_FILL fixtures, stable idempotent retry, 422 `rejection_reasons[]`, and filled-but-`platform_error` recoverable state are the right submit/execution proofs (`engine.py:121-160`). Wave A demo-in-mock + live SoR reads + brokerage-SDK grep are sound.
+
+   Add: (a) assert kill-switch / approval refusal is **server-side** before any Wave C run (already in Wave C proof — keep); (b) once `getOrders` is specified, a fixture that a NO_FILL appears in the orders seam **without** a silent-trade row; (c) performance curve labeled "settled / last ≤500 closed" and not scaled as if it were marked NAV (`PerformanceChart.tsx:29` multiplies multipliers by "current value" — settled curve × marked value after B0 is a presentation footgun).
+
+### Remaining factual errors / imprecisions in rev-2 tables
+
+- Plan header backend head `954d738` is stale; current `app-hookup` is `6f4bc2b` (docs-only successor). Update on next rev.
+- §1 LLM claim: mock is default via `STRATFOLIO_LLM_PROVIDER` (`config.py:51-56`, `factory.py:12-28`), not merely "BASE_URL+key+model unset" — empty provider fields with `openai-compatible` **raises**, it does not silently mock.
+- §3.1 `getOrders` implies BKT outcomes are listable; they are not without fan-out or a new endpoint (see checklist 1).
+- §3.1 positions "company from local symbol map" — no such live map exists outside mock seed.
+- §4 APP-103 "Watchlist → plt watchlist" overstates product fit (ActiveUniverse ≠ terminal rail).
+- §3.3 / auto-exec copy: cite `AITradingControl` + `PlannerPage` in addition to `UpcomingTradePlans:565`.
+- Minor: TradePlan status enum includes `PROPOSED` (`TradePlanStatus.java:5`); adapter status map should name it.
+
+Corrected Codex items (`totalDeposited`, `action_type`, `getOrders` PARTIAL, ThesisView/PlanView, D3 unfreeze, D6 split, D1 proxy vs release, B0, demo confinement, FILLED/NO_FILL proofs) check out against code.
+
+### Risks / missing work not already in the Codex review
+
+1. **APP-103 ActiveUniverse vs terminal Watchlist semantic mismatch** (above) — highest-priority plan defect left.
+2. **`getOrders` needs an explicit merge algorithm or a BKT list/history gap** — Wave B UI otherwise cannot honestly show NO_FILL history.
+3. **Confidence 0..1 vs conviction 0–100** — add to §7 wire footguns; map or keep fractional in view models.
+4. **Ticket must pin `execution_mode` + `risk_profile`** to PolicyGate allowlists; redesign text at `TradeTicket.tsx:340-346` is noted, pinning is not.
+5. **Settled performance × live marked NAV** inconsistency after B0 — pick one equity basis for the chart.
+6. **CreateActivityRequest** for interim disposition/disable requires a real `ActionType` (use `USER_ACTIVITY`) + `entityType`/`entityId` (`CreateActivityRequest.java:10-15`) — specify the payload schema so localStorage+activity does not invent free-form types the enum rejects.
+7. **D10 provenance chips** replace DemoBadge — also scrub `PortfolioPage.tsx:294-299` global "everything is simulated" copy (Codex noted; rev 2 D10 covers intent; ensure Wave A proof asserts mixed-mode copy is gone).
+
+### Overall recommendation
+
+**Approve-with-changes.** Rev 2 successfully integrates Codex's rework drivers (mappings, D3 unfreeze, D6, B0, demo confinement, execution proofs, composer/HKP-AI-3a+8 split). Do not start Wave A until the ActiveUniverse/APP-103 scope is corrected, `getOrders` is given an implementable merge (or backend gap), confidence scale is footgunned, and company/brokerage fields are explicitly optional or dropped from live view models. After those edits, the wave plan is implementation-ready.
