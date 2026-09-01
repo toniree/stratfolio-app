@@ -64,7 +64,7 @@ Legend: **LIVE** · **PARTIAL** · **BLOCKED(gap)** · **LOCAL**.
 | `getOutlook(accountId)` | — | **BLOCKED (HKP-AI-5).** |
 | `getPerformance(accountId, period)` | plt `GET /api/v1/silent-trades?status=CLOSED&limit=500` → settled-equity curve | **PARTIAL** — labeled "settled equity · last ≤500 closed trades" (HKP-PLT-8 for pagination; HKP-PLT-2 for marked history). **One equity basis per chart:** the settled curve is never multiplied by live marked value (`PerformanceChart.tsx:29` footgun) — after B0 the chart shows settled series + current marked NAV as a separate point/stat, not a blended series. |
 | `submitOrder(...)` — open | plt `POST /api/v1/trade-plans` → bkt `POST /api/v1/executions {trade_plan_id, idempotency_key}` | **PARTIAL, Wave B, redesigned ticket** — full option identity from live chain (B0 prereq), D11 pinned policy inputs, 422 `rejection_reasons[]` verbatim, "silent execution attempt" UX (no market/GFD/$0-commission copy). |
-| `submitOrder(...)` — close | — | **BLOCKED (HKP-BKT-1)** — disabled in live mode; mock keeps the simulated flow, labeled. |
+| `submitOrder(...)` — close | bkt `POST /api/v1/executions/exits {silent_trade_id, idempotency_key}` | **LIVE (APP-114)** — `ManualCloseTicket` via proxy; mock keeps the simulated flow, labeled. |
 | `getOrders()` (new seam method) | **Implementable merge (rev 3):** plt `GET /api/v1/silent-trades` (fills + closes) ∪ plt `GET /api/v1/trade-plans?status=VALIDATED\|REJECTED` (pending/rejected intents) ∪ **session-retained bkt submit outcomes** (NO_FILL/platform_error live only in the execution response until HKP-BKT-4 adds a list route) | **PARTIAL** — durable NO_FILL *history* is BLOCKED (HKP-BKT-4); until then NO_FILL entries persist for the session and the UI labels history "fills & pending plans". No N+1 by-plan fan-out. |
 | `addPositionFromIdea(...)` | thesis → plan → execution | **PARTIAL** — same constraints. |
 | `getActivity()` | plt `GET /api/v1/activity?limit=100` | **LIVE** — wire field `action_type`; complete `ActionType`→kind map + `other` fallback. |
@@ -107,7 +107,7 @@ Two different products, previously conflated:
 
 ### 3.9 Deliberately LOCAL
 
-Tile/field prefs, mobile ticker, notification booleans, unread flag. AI settings + master toggle: interim local; execution-affecting policy becomes server-enforced via HKP-AI-8/HKP-PLT-5 (a client-side kill switch is not a kill switch).
+Tile/field prefs, mobile ticker, notification booleans, unread flag. AI settings master toggle, approval mode, and trading window: **server-enforced** (APP-114, contracts §16) — bound to `VITE_DATA_PORTFOLIO=live` via `executionPolicyApi`; plt `user_config` is the system of record.
 
 ---
 

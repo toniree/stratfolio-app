@@ -387,3 +387,110 @@ Docker stack brought up (`make up && make wait-db`). mnd built and started E2E-s
 - **Manual close still disabled** — live `submitOrder(close)` remains refused pending BKT-018 wiring (HKP-BKT-1); not a Wave B failure.
 - **AI plan composer deferred to Wave C** — `createIdea` via regex NLP blocked on HKP-AI-3a; live planner reads + schema-valid activity dispositions only (APP-113).
 - **`as_of` daily trade cap** — dev DB from prior AI cycles saturated `2026-06-01`; conforming plan used `as_of=2026-06-04` with matching DTE (PolicyGate truth, not an app defect).
+
+---
+
+## APP-114 — DONE (verified)
+
+**Date:** 2026-09-01  
+**Branch:** `backend-hookup` @ `ad61648` + `622848a`  
+**Agent:** Cursor verification pass  
+**Scope:** live manual close via bkt user-exit route + server-enforced AI settings (execution policy)
+
+### Summary
+
+| Check | Result |
+|---|---|
+| 1. `npx tsc -b` | **PASS** (exit 0) |
+| 2. `npx vitest run` | **PASS** — 65 files, **453** tests, 9.64s |
+| 3. `npm run build` | **PASS** (exit 0; chunk-size warning only) |
+| 4. `npx oxlint src` | **PASS** (exit 0, no errors) |
+| 5–8. Live replay smoke (policy round-trip + manual close via Vite proxy) | **PASS** |
+
+**Overall: APP-114 verification PASSED.**
+
+---
+
+### Static / suite evidence (2026-09-01, commits `ad61648` + `622848a`)
+
+#### Typecheck
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npx tsc -b
+# exit 0, no output
+```
+
+#### Vitest
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npx vitest run
+```
+```
+ Test Files  65 passed (65)
+      Tests  453 passed (453)
+   Duration  9.64s
+```
+
+#### Production build
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npm run build
+# exit 0 — dist/assets/index-BJPI3l7Y.js built
+```
+
+#### Oxlint
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npx oxlint src
+# exit 0, no errors
+```
+
+---
+
+### Live replay smoke evidence (2026-09-01)
+
+Docker stack brought up (`make up && make wait-db`). mnd built and started E2E-style (`MARKET_MODE=REPLAY`, `MND_REPLAY_AUTOSTART=false`, `MND_STALENESS_THRESHOLD_SECONDS=3600`, `REPLAY_SPEED=120`, `MND_DB_ENABLED=true`); replay `synthetic-v1` at speed 120 started via admin API (`POST /admin/replay/load`, `/speed`, `/start`). plt (`make run`) and bkt (`BKT_USE_REAL_PEERS=true`, `BKT_MAX_QUOTE_AGE_SECONDS=2400`, `make run`) reached health.
+
+#### Backend / app startup
+
+| Step | Result |
+|---|---|
+| mnd `:7102/readyz` | **PASS** — `mode=REPLAY`, `replay_dataset=synthetic-v1`, `replay_state=RUNNING`, `staleness_threshold_seconds=3600` |
+| plt `:7201/actuator/health` | **PASS** — `{"status":"UP",...}` |
+| bkt `:7401/health` | **PASS** — `{"status":"UP","service":"service-bkt",...}` |
+| App `.env` (`VITE_DATA_PORTFOLIO=live`, `VITE_DATA_MARKET=live`) + `npm run dev` | **PASS** — Vite ready on `:5173` |
+
+Execution policy is bound to `VITE_DATA_PORTFOLIO=live` (no separate domain flag).
+
+#### Policy round-trip via proxy (settings modal path)
+
+`GET /plt/api/v1/config` → **200**, **array** shape (includes `policy.ai_trading_enabled`, `policy.execution_approval_mode`, `policy.trading_window`).
+
+Existing VALIDATED-but-unexecuted plan `01a05ba3-3533-7c05-8d96-8e7bc86266d4` used (no new plan needed).
+
+| Step | HTTP | Notes |
+|---|---|---|
+| `PUT /plt/api/v1/config/policy.ai_trading_enabled` `{"value":false}` | **200** | switch off |
+| `POST /bkt/api/v1/executions` `{"trade_plan_id":"01a05ba3-3533-7c05-8d96-8e7bc86266d4","idempotency_key":"<uuid>"}` | **422** | `rejection_reasons: ["POLICY_DISABLED"]` |
+| `PUT …/policy.ai_trading_enabled` `{"value":true}` | **200** | switch restored |
+| Same `POST /bkt/api/v1/executions` (same idempotency key) | **201** | `status: FILLED`, `action: ENTRY`, `silent_trade_id: 01a05bd8-db8e-79e8-93e7-670a2eb3ec67`, `reported_to_platform: true` |
+
+#### Manual-close chain via proxy (ticket path)
+
+OPEN silent trade `01a05b9c-26a5-746a-840e-bb742be86a2b` (AAPL CALL; pre-existing).
+
+`POST /bkt/api/v1/executions/exits` `{"silent_trade_id":"01a05b9c-26a5-746a-840e-bb742be86a2b","idempotency_key":"<uuid>"}`:
+
+| Attempt | HTTP | `action` | `exit_reason` | `status` | `replayed` (body) |
+|---|---|---|---|---|---|
+| First | **201** | **EXIT** | **USER_CLOSE** | **FILLED** | `false` |
+| Replay (same body) | **200** | **EXIT** | **USER_CLOSE** | **FILLED** | **`false`** (HTTP 200 replay; body flag never set — see follow-up) |
+
+plt `GET /api/v1/silent-trades/01a05b9c-26a5-746a-840e-bb742be86a2b` → **`status: CLOSED`** after FILLED exit.
+
+#### Cleanup performed
+- Policy defaults restored (`ai_trading_enabled=true`, `execution_approval_mode=auto`, `trading_window=extended`)
+- Vite dev server stopped
+- mnd, plt, and bkt processes stopped
+- Verification `.env` removed from app repo
+- Docker compose stack **left running** (`make up`)
+
+#### Backend follow-ups (recorded, not app defects)
+1. **bkt exits `replayed` body flag** — on idempotent replay of `POST /executions/exits`, HTTP is **200** but the response body's `replayed` field stays **`false`** (both attempts returned `replayed: false`). The app's `toOrderFromExit` derives replay from HTTP status, not the body; backend `outcome_from_record` never sets the wire flag on the exits route.
+2. **plt strict-boolean vs bkt string-tolerant kill-switch parsing** — plt `PUT /api/v1/config/policy.ai_trading_enabled` rejects non-boolean values with **422** (`CONFIG_VALUE_INVALID`), so the app cannot store `"true"`/`"false"` strings via the settings modal. bkt §17 accepts string spellings when read directly from config. Exposure is **direct-DB-write only**; no app-path mismatch observed in this pass.
