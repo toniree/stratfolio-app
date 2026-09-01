@@ -79,8 +79,16 @@ export interface ThesisAnalytics {
 
   /** Bid–ask spread as a percentage of mid. */
   spreadPct: number
-  openInterest: number
-  volume: number
+  /**
+   * Session open interest and volume, when a source supplied them.
+   *
+   * Absent for every live contract: these are facts about a real market that a
+   * browser cannot know, and the seeded PRNG that used to produce them was
+   * indistinguishable from the real thing on screen (§6). Real values arrive
+   * with the mnd chain; a consumer without one renders "—", never a 0.
+   */
+  openInterest?: number
+  volume?: number
 }
 
 /**
@@ -185,8 +193,8 @@ export function thesisAnalytics(idea: Idea, spot: number, history: number[]): Th
     modelValue: model.price,
     modelEdgePct: debit > 0 ? (model.price / debit - 1) * 100 : 0,
     spreadPct: debit > 0 ? ((halfSpread * 2) / debit) * 100 : 0,
-    openInterest: liquidity.openInterest,
-    volume: liquidity.volume,
+    openInterest: liquidity?.openInterest,
+    volume: liquidity?.volume,
   }
 }
 
@@ -245,8 +253,9 @@ function equityAnalytics(
     modelValue: entry,
     modelEdgePct: 0,
     spreadPct: 0.05,
-    openInterest: 0,
-    volume: 0,
+    // An equity case has no contract liquidity to report; absent, not zero.
+    openInterest: undefined,
+    volume: undefined,
   }
 }
 

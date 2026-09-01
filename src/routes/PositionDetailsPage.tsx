@@ -7,6 +7,7 @@ import { useAssistantContext } from '@/hooks/useAssistantContext'
 import { usePrices } from '@/store/priceStore'
 import { usePositions } from '@/hooks/queries'
 import { computeTotals } from '@/lib/portfolioMath'
+import { useOptionMarks } from '@/hooks/marketQueries'
 import {
   formatMoney,
   formatQty,
@@ -51,7 +52,11 @@ export function PositionDetailsPage() {
   const { data: positions, isLoading } = usePositions(accountId)
   const { data: plannerIdeas } = usePlannerIdeas()
 
-  const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  const { marks } = useOptionMarks(positions)
+  const totals = useMemo(
+    () => computeTotals(positions ?? [], prices, marks),
+    [positions, prices, marks],
+  )
   const valuation = totals.valuations.find((v) => v.position.id === id)
   const snap = valuation ? prices[valuation.position.symbol] : undefined
   // Plans already attached to this holding, so the sheet opens populated.

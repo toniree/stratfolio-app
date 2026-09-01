@@ -10,6 +10,7 @@ import {
   usePositions,
 } from '@/hooks/queries'
 import { computeTotals } from '@/lib/portfolioMath'
+import { useOptionMarks } from '@/hooks/marketQueries'
 
 /**
  * The mobile face of the desktop chatbox. When the floating chat bubble is
@@ -24,7 +25,11 @@ export function MobileAssistantSheet({ onMinimize }: { onMinimize: () => void })
   const { data: outlook, isLoading: outlookLoading, refetch } = usePortfolioOutlook(accountId)
   const { data: activity } = useActivity()
   const { data: plans } = usePlannerIdeas()
-  const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  const { marks } = useOptionMarks(positions)
+  const totals = useMemo(
+    () => computeTotals(positions ?? [], prices, marks),
+    [positions, prices, marks],
+  )
 
   return (
     <>

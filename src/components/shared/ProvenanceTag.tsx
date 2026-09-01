@@ -31,6 +31,32 @@ const LABEL: Record<Exclude<Provenance, 'live'>, { text: string; title: string; 
   },
 }
 
+/**
+ * The market service's own staleness verdict, passed through untouched.
+ *
+ * mnd decides what "stale" means (its threshold, against event time, on its
+ * clock) and the browser does not re-derive it — a second opinion computed
+ * from `Date.now()` would disagree with the service in replay mode, where the
+ * dataset sits at a historical instant by design. When mnd says a quote is
+ * stale, the price beside this badge is still real; it is simply old, and a
+ * number that is quietly old is the one people act on by mistake.
+ */
+export function StaleTag({ stale, className }: { stale?: boolean; className?: string }) {
+  if (!stale) return null
+  return (
+    <span
+      title="The market data service reports this quote as older than its freshness threshold."
+      className={cn(
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold tracking-[0.06em] uppercase',
+        'border-[#f5c26b]/25 bg-[#f5c26b]/10 text-[#f5c26b]',
+        className,
+      )}
+    >
+      Stale
+    </span>
+  )
+}
+
 export function ProvenanceTag({
   provenance,
   className,

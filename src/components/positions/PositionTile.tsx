@@ -39,6 +39,8 @@ import {
   type PositionTileField,
 } from '@/store/positionTilePreferences'
 import { usePlannerIdeas } from '@/hooks/queries'
+import { useOptionMarks } from '@/hooks/marketQueries'
+import { optionMarkKey } from '@/api/http/adapters/market'
 import type { PlannerIdea } from '@/api/newsTypes'
 
 /** Compact carousel tile — high signal only. Depth lives on the details page. */
@@ -55,6 +57,20 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
   const { position, price, dayChangePct, dayChange, marketValue, totalReturn, totalReturnPct } =
     valuation
   const underlying = usePrice(position.symbol)
+  // Real chain values for the stats panel below. The query key matches the
+  // page-level `useOptionMarks`, so TanStack serves this from the same
+  // request rather than issuing one per tile.
+  const { marks } = useOptionMarks(useMemo(() => [position], [position]))
+  const contractMark = position.option
+    ? marks[
+        optionMarkKey({
+          symbol: position.symbol,
+          right: position.option.right,
+          strike: position.option.strike,
+          expiry: position.option.expiry,
+        })
+      ]
+    : undefined
   const up = dayChangePct >= 0
   const to = `/app/positions/${position.id}`
   const userNote = position.userNote?.trim()
@@ -311,6 +327,7 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
               underlying={underlying.price}
               avgCost={position.avgCost}
               symbol={position.symbol}
+              mark={contractMark}
             />
           ) : null}
           <button

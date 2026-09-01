@@ -1,18 +1,12 @@
 import { gaussian, hashString, mulberry32 } from '@/lib/prng'
 import { SYMBOLS, type SymbolSpec } from '@/api/mock/seededData'
+import type { PriceListener, PriceMap, QuoteProvider } from '@/api/marketData/types'
 
-export interface PriceSnapshot {
-  symbol: string
-  price: number
-  previousClose: number
-  open: number
-  dayChange: number
-  dayChangePct: number
-  /** Rolling window of recent prices for the inline sparklines. */
-  history: number[]
-}
-
-export type PriceMap = Record<string, PriceSnapshot>
+// The canonical shapes moved to `types.ts` when the live provider landed
+// (APP-108), so nothing importing a quote has to know which source produced
+// it. Re-exported here because most of the app already imports them from this
+// module and the demo book is still one of the two real sources.
+export type { PriceListener, PriceMap, PriceSnapshot } from '@/api/marketData/types'
 
 const WINDOW = 28
 /** Length of the deterministic pre-generated path per symbol. */
@@ -59,16 +53,19 @@ function buildPath(spec: SymbolSpec): number[] {
   return path
 }
 
-export type PriceListener = (prices: PriceMap) => void
-
 /**
- * Single-interval market data simulator.
+ * Single-interval market data simulator — the **mock-mode** quote source.
  *
  * One `setInterval` batch-updates every symbol per tick and notifies listeners
  * once — mirroring how a real batched WebSocket feed would behave, rather than
  * running a timer per symbol.
+ *
+ * Every snapshot it emits is stamped `provenance: 'mock'`, so a panel showing
+ * these numbers renders the "Simulated" badge (D10). The scripted demo is a
+ * supported product mode, not a fallback: this class is bound only when
+ * `VITE_DATA_MARKET` is not `live`, and nothing ever degrades to it at runtime.
  */
-export class MarketDataSimulator {
+export class MarketDataSimulator implements QuoteProvider {
   private paths = new Map<string, number[]>()
   private specs = new Map<string, SymbolSpec>()
   private cursor = 0
@@ -106,6 +103,7 @@ export class MarketDataSimulator {
         dayChange,
         dayChangePct: (dayChange / spec.previousClose) * 100,
         history,
+        provenance: 'mock',
       }
     }
     return next

@@ -100,6 +100,53 @@ describe('§6 — removed from live views', () => {
   })
 })
 
+describe('§6 — market data (APP-108)', () => {
+  it('no index level is derived from another symbol', () => {
+    // The strip used to render a DOW level as SPY's day change × 0.42. A
+    // plausible number for an index nobody in this system carries is the most
+    // dangerous fabrication there is: nobody double-checks a figure they
+    // recognise.
+    const source = code(join(SRC, 'components/shell/TopBar.tsx'))
+    expect(source).not.toMatch(/'DOW'/)
+    expect(source).not.toMatch(/factor:\s*0\.\d+/)
+    expect(source).not.toMatch(/base:\s*\d/)
+  })
+
+  it('in-browser IV and OI are gated on the demo book’s own model terms', () => {
+    const source = read(join(SRC, 'lib/optionMath.ts'))
+    // `extrinsicBase` exists only on seeded contracts, so it is the marker
+    // that a contract may legitimately be priced by the browser at all.
+    expect(source).toMatch(/export function hasModelTerms/)
+    expect(source).toMatch(/if \(!hasModelTerms\(contract\)\) return undefined/)
+    expect(source).toMatch(/if \(contract\.extrinsicBase === undefined\) return undefined/)
+  })
+
+  it('the live quote provider never imports the demo seed book (D4)', () => {
+    for (const file of [
+      join(SRC, 'api/marketData/PollingQuoteProvider.ts'),
+      join(SRC, 'api/marketData/types.ts'),
+      join(SRC, 'api/http/adapters/market.ts'),
+      join(SRC, 'api/http/HttpMarketDataApi.ts'),
+    ]) {
+      expect(read(file), `${rel(file)} imports mock seed data`).not.toMatch(
+        /from '@\/api\/mock\//,
+      )
+    }
+  })
+
+  it('the terminal chain and chart render synthetic surfaces only in mock mode', () => {
+    const chain = read(join(SRC, 'components/terminal/OptionsChain.tsx'))
+    expect(chain).toMatch(/isMarketLive/)
+    // The Black–Scholes ladder is the `else` of the live branch, never both.
+    expect(chain).toMatch(/if \(live\) return liveRows\(chain\.data, spot\)/)
+
+    const chart = read(join(SRC, 'components/terminal/TerminalChart.tsx'))
+    // Repricing a tape into an option's history uses the seeded smile; the
+    // facade has no historical chain to replace it with.
+    expect(chart).toMatch(/contract && !live/)
+  })
+})
+
 describe('§6 / D10 — the global simulated claim', () => {
   it('the demo badge is conditional on the whole build being mocked', () => {
     const source = read(join(SRC, 'components/shell/DemoBadge.tsx'))

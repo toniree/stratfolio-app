@@ -1,5 +1,6 @@
 import { cn } from '@/lib/cn'
 import type { OptionContract } from '@/api/types'
+import type { OptionMark } from '@/api/marketData/types'
 import {
   breakeven,
   daysToExpiry,
@@ -9,6 +10,7 @@ import {
   estimateLiquidity,
   estimateTheta,
   estimateVega,
+  hasModelTerms,
   percentOutOfMoney,
 } from '@/lib/optionMath'
 import {
@@ -83,20 +85,28 @@ export const OPTION_STAT_OPTIONS: { id: OptionStatField; label: string; detail: 
 
 /**
  * Contract analytics for a position tile, rendered as a dense line-by-line
- * ledger. Every figure derives from the same deterministic option model that
- * prices the tile, so nothing here can contradict the mark shown beside it.
+ * ledger.
+ *
+ * Two sources, never mixed silently. When `mark` carries a real mnd chain
+ * quote, the Greeks, IV, volume and open interest are the **server's** numbers.
+ * Without one, they come from the in-browser demo model — which only exists
+ * for seeded contracts, so a live contract with no chain quote renders "—"
+ * rather than a plausible invention (§6).
  */
 export function OptionStatsPanel({
   contract,
   underlying,
   avgCost,
   symbol,
+  mark,
   className,
 }: {
   contract: OptionContract
   underlying: number
   avgCost: number
   symbol: string
+  /** Real chain values for this contract, when the server has quoted it. */
+  mark?: OptionMark
   className?: string
 }) {
   const stored = usePositionTilePreferences((state) => state.optionStats)
@@ -105,7 +115,14 @@ export function OptionStatsPanel({
   return (
     <dl className={cn('flex min-w-0 flex-col justify-start', className)}>
       {stats.map((stat) => {
-        const { label, value, tone } = optionStatLine(stat, contract, underlying, avgCost, symbol)
+        const { label, value, tone } = optionStatLine(
+          stat,
+          contract,
+          underlying,
+          avgCost,
+          symbol,
+          mark,
+        )
         return (
           <div
             key={stat}
@@ -132,34 +149,64 @@ export function OptionStatsPanel({
   )
 }
 
+/** The one place "we do not know this" is spelled, so it always reads alike. */
+const UNKNOWN = '—'
+
 export function optionStatLine(
   stat: OptionStatField,
   contract: OptionContract,
   underlying: number,
   avgCost: number,
   symbol: string,
+  mark?: OptionMark,
 ): { label: string; value: string; tone?: 'up' | 'down' } {
+  // The demo model may only price a seeded contract. For a live one the
+  // server's chain values are the only legitimate source, and their absence
+  // renders as "—".
+  const modelled = hasModelTerms(contract)
+  const greeks = mark?.greeks
+
   switch (stat) {
-    case 'delta':
+    case 'delta': {
+      if (greeks) return { label: 'Delta', value: signedFixed(greeks.delta, 2) }
+      if (!modelled) return { label: 'Delta', value: UNKNOWN }
       return { label: 'Delta', value: signedFixed(deltaSigned(contract, underlying), 2) }
-    case 'gamma':
+    }
+    case 'gamma': {
+      if (greeks) return { label: 'Gamma', value: greeks.gamma.toFixed(3) }
+      if (!modelled) return { label: 'Gamma', value: UNKNOWN }
       return { label: 'Gamma', value: estimateGamma(contract, underlying).toFixed(3) }
+    }
     case 'theta': {
+      if (greeks) return { label: 'Theta', value: signedFixed(greeks.theta, 2), tone: 'down' }
+      if (!modelled) return { label: 'Theta', value: UNKNOWN }
       const theta = estimateTheta(contract, underlying)
       return { label: 'Theta', value: signedFixed(theta, 2), tone: 'down' }
     }
-    case 'vega':
+    case 'vega': {
+      if (greeks) return { label: 'Vega', value: greeks.vega.toFixed(2) }
+      if (!modelled) return { label: 'Vega', value: UNKNOWN }
       return { label: 'Vega', value: estimateVega(contract, underlying).toFixed(2) }
-    case 'iv': {
-      // No extrinsic base means no in-browser IV to back out. Real IV arrives
-      // with the mnd chain (Wave B0); until then "—" is the honest answer.
-      const iv = estimateImpliedVol(contract, underlying)
-      return { label: 'IV', value: iv === undefined ? '—' : `${iv.toFixed(1)}%` }
     }
-    case 'volume':
-      return { label: 'Vol', value: compact(estimateLiquidity(contract, symbol).volume) }
-    case 'openInterest':
-      return { label: 'OI', value: compact(estimateLiquidity(contract, symbol).openInterest) }
+    case 'iv': {
+      // mnd sends IV as a plain fraction (a dimensionless model output, never
+      // money); the demo model already reports percentage points.
+      if (mark?.impliedVolatility !== undefined)
+        return { label: 'IV', value: `${(mark.impliedVolatility * 100).toFixed(1)}%` }
+      const iv = estimateImpliedVol(contract, underlying)
+      return { label: 'IV', value: iv === undefined ? UNKNOWN : `${iv.toFixed(1)}%` }
+    }
+    case 'volume': {
+      if (mark?.volume !== undefined) return { label: 'Vol', value: compact(mark.volume) }
+      const liquidity = estimateLiquidity(contract, symbol)
+      return { label: 'Vol', value: liquidity ? compact(liquidity.volume) : UNKNOWN }
+    }
+    case 'openInterest': {
+      if (mark?.openInterest !== undefined)
+        return { label: 'OI', value: compact(mark.openInterest) }
+      const liquidity = estimateLiquidity(contract, symbol)
+      return { label: 'OI', value: liquidity ? compact(liquidity.openInterest) : UNKNOWN }
+    }
     case 'breakeven':
       return { label: 'B/E', value: `$${breakeven(contract, avgCost).toFixed(2)}` }
     case 'dte':

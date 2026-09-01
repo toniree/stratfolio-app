@@ -1,5 +1,30 @@
 import type { OptionContract } from '@/api/types'
+import type { OptionMark } from '@/api/marketData/types'
 import { hashString, mulberry32 } from '@/lib/prng'
+
+/**
+ * The mark for a contract, in preference order (APP-108).
+ *
+ * 1. **A server chain mid.** When mnd has quoted the contract, that number is
+ *    the mark — a real one, and the whole point of Wave B0: plt never marks an
+ *    open position (`unrealized_pnl` is 0 until close), so before this the
+ *    app's unrealized P&L was an in-browser estimate wearing a real position's
+ *    clothes.
+ * 2. **The deterministic demo model below**, for mock mode.
+ *
+ * A live contract carries no `extrinsicBase`, so when the server has no quote
+ * the model degrades to pure intrinsic — understated, never invented — and
+ * callers label the valuation `synthetic`.
+ */
+export function optionMark(
+  contract: OptionContract,
+  underlying: number,
+  mark?: OptionMark,
+): number {
+  // A server mid of 0 is not a mark: it is an unquoted contract.
+  if (mark?.mid !== undefined && mark.mid > 0) return mark.mid
+  return modelMark(contract, underlying)
+}
 
 /**
  * A deliberately simple, fully deterministic option model.
@@ -12,7 +37,7 @@ import { hashString, mulberry32 } from '@/lib/prng'
  * mark = intrinsic + extrinsic, where extrinsic peaks at the money and decays
  * as the contract moves away from the strike in either direction.
  */
-export function optionMark(contract: OptionContract, underlying: number): number {
+export function modelMark(contract: OptionContract, underlying: number): number {
   const intrinsic =
     contract.right === 'CALL'
       ? Math.max(0, underlying - contract.strike)
@@ -54,8 +79,8 @@ export function percentOutOfMoney(contract: OptionContract, underlying: number):
 /** Numeric delta, estimated from the model's own local slope. */
 export function estimateDelta(contract: OptionContract, underlying: number): number {
   const step = Math.max(underlying * 0.005, 0.01)
-  const up = optionMark(contract, underlying + step)
-  const down = optionMark(contract, underlying - step)
+  const up = modelMark(contract, underlying + step)
+  const down = modelMark(contract, underlying - step)
   const delta = (up - down) / (2 * step)
   return Math.max(0, Math.min(1, contract.right === 'CALL' ? delta : -delta))
 }
@@ -78,7 +103,7 @@ export function estimateTheta(contract: OptionContract, underlying: number): num
     contract.right === 'CALL'
       ? Math.max(0, underlying - contract.strike)
       : Math.max(0, contract.strike - underlying)
-  const extrinsic = Math.max(0, optionMark(contract, underlying) - intrinsic)
+  const extrinsic = Math.max(0, modelMark(contract, underlying) - intrinsic)
   // Decay accelerates into expiry rather than running down in a straight line.
   return -(extrinsic / days) * (1 + 30 / (days + 30))
 }
@@ -89,7 +114,7 @@ export function estimateVega(contract: OptionContract, underlying: number): numb
     contract.right === 'CALL'
       ? Math.max(0, underlying - contract.strike)
       : Math.max(0, contract.strike - underlying)
-  const extrinsic = Math.max(0, optionMark(contract, underlying) - intrinsic)
+  const extrinsic = Math.max(0, modelMark(contract, underlying) - intrinsic)
   return extrinsic * 0.02
 }
 
@@ -114,11 +139,33 @@ export function estimateImpliedVol(
   return Math.max(0.05, Math.min(3, iv)) * 100
 }
 
-/** Deterministic session volume and open interest for the demo book. */
+/**
+ * True when a contract carries the demo book's model terms.
+ *
+ * `extrinsicBase` exists only on seeded mock contracts — a live contract built
+ * from a plt position or an mnd chain has none — so it is the one honest
+ * marker of "this contract may be priced by the in-browser model". Every
+ * model-derived stat below is gated on it (§6).
+ */
+export function hasModelTerms(contract: OptionContract): boolean {
+  return contract.extrinsicBase !== undefined
+}
+
+/**
+ * Deterministic session volume and open interest **for the demo book only**.
+ *
+ * Returns `undefined` for a contract with no `extrinsicBase` — i.e. every live
+ * one. Volume and open interest are facts about a real market that a browser
+ * cannot know; the seeded PRNG below produces numbers that look exactly like
+ * those facts, which is precisely the fabrication §6 removes from live mode.
+ * Real volume and OI come from the mnd chain (`OptionQuote`), and a caller
+ * without one prints "—".
+ */
 export function estimateLiquidity(
   contract: OptionContract,
   symbol: string,
-): { volume: number; openInterest: number } {
+): { volume: number; openInterest: number } | undefined {
+  if (!hasModelTerms(contract)) return undefined
   const rand = mulberry32(hashString(`${symbol}|${contract.strike}|${contract.expiry}`))
   const openInterest = Math.round(400 + rand() * 24_000)
   const volume = Math.round(openInterest * (0.05 + rand() * 0.35))

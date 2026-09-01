@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { dataMode, hasLiveDomain, isLive, requestTimeoutMs, serviceBase } from '@/api/http/env'
+import {
+  DEFAULT_MARKET_SYMBOLS,
+  chainPollMs,
+  dataMode,
+  hasLiveDomain,
+  isLive,
+  marketSymbols,
+  quotePollMs,
+  requestTimeoutMs,
+  serviceBase,
+} from '@/api/http/env'
 
 describe('per-domain data mode (D2)', () => {
   it('defaults every domain to mock when nothing is set', () => {
@@ -7,6 +17,7 @@ describe('per-domain data mode (D2)', () => {
     expect(dataMode('portfolio', env)).toBe('mock')
     expect(dataMode('universe', env)).toBe('mock')
     expect(dataMode('news', env)).toBe('mock')
+    expect(dataMode('market', env)).toBe('mock')
     expect(hasLiveDomain(env)).toBe(false)
   })
 
@@ -39,6 +50,30 @@ describe('service bases', () => {
 
   it('honours an explicit override for a differently-mounted reverse proxy', () => {
     expect(serviceBase('plt', { VITE_PLT_BASE: '/api/plt' })).toBe('/api/plt')
+  })
+})
+
+describe('market data configuration (APP-108)', () => {
+  it('has its own flag, so live quotes do not ride in on another domain', () => {
+    expect(isLive('market', { VITE_DATA_PORTFOLIO: 'live' })).toBe(false)
+    expect(isLive('market', { VITE_DATA_MARKET: 'live' })).toBe(true)
+    expect(hasLiveDomain({ VITE_DATA_MARKET: 'live' })).toBe(true)
+  })
+
+  it('parses a symbol request list, upper-cased and de-duplicated', () => {
+    expect(marketSymbols({})).toEqual([...DEFAULT_MARKET_SYMBOLS])
+    expect(marketSymbols({ VITE_MARKET_SYMBOLS: ' spy , qqq ,spy ' })).toEqual(['SPY', 'QQQ'])
+    // An empty or all-blank list is not "watch nothing"; it is unset.
+    expect(marketSymbols({ VITE_MARKET_SYMBOLS: ' , ' })).toEqual([...DEFAULT_MARKET_SYMBOLS])
+  })
+
+  it('polls chains far more slowly than quotes (D8)', () => {
+    expect(quotePollMs({})).toBe(5_000)
+    expect(chainPollMs({})).toBe(60_000)
+    expect(chainPollMs({})).toBeGreaterThan(quotePollMs({}))
+    // A nonsense or punishing value falls back rather than hammering mnd.
+    expect(quotePollMs({ VITE_MARKET_QUOTE_POLL_MS: '10' })).toBe(5_000)
+    expect(quotePollMs({ VITE_MARKET_QUOTE_POLL_MS: '15000' })).toBe(15_000)
   })
 })
 

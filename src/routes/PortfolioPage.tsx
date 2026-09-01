@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useUiStore } from '@/store/uiStore'
 import { useThesisDecisionStore } from '@/store/thesisDecisionStore'
-import { usePrices } from '@/store/priceStore'
+import { usePrices, useTrackedSymbols } from '@/store/priceStore'
 import {
   useIdeas,
   useActivity,
@@ -12,8 +12,11 @@ import {
   usePortfolioOutlook,
   usePositions,
 } from '@/hooks/queries'
+import { useOptionMarks } from '@/hooks/marketQueries'
 import { computeTotals } from '@/lib/portfolioMath'
 import { hasLiveDomain } from '@/api/http/env'
+import { ProvenanceTag } from '@/components/shared/ProvenanceTag'
+import { formatMoney } from '@/lib/format'
 import type { PerformancePeriod } from '@/api/types'
 import { PeriodSelector } from '@/components/portfolio/PeriodSelector'
 import { PerformanceChart } from '@/components/charts/PerformanceChart'
@@ -57,7 +60,16 @@ export function PortfolioPage() {
   const { data: activity } = useActivity()
   const thesisDecisions = useThesisDecisionStore((s) => s.decisions)
 
-  const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  // Real chain marks for the open book (APP-108). `{}` in mock mode, which
+  // leaves the deterministic demo option model untouched.
+  const { marks } = useOptionMarks(positions)
+  // The tape should carry the symbols actually held, not just the default set.
+  useTrackedSymbols(useMemo(() => (positions ?? []).map((p) => p.symbol), [positions]))
+
+  const totals = useMemo(
+    () => computeTotals(positions ?? [], prices, marks),
+    [positions, prices, marks],
+  )
   const allSimulated = !hasLiveDomain()
 
   const counts = useMemo(() => {
@@ -134,14 +146,23 @@ export function PortfolioPage() {
           <div className="text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">
             Performance
           </div>
-          <div
-            className={`num mt-1 text-[15px] font-bold ${positive ? 'text-up' : 'text-down'}`}
-          >
-            {formatSignedMoney(periodReturn)} ({formatSignedPercent(periodReturnPct)}){' '}
-            <span className="font-medium text-ink-muted">
-              {period === '1D' ? 'today' : `over ${period}`}
-            </span>
-          </div>
+          {period === '1D' && !totals.dayPlAvailable ? (
+            // At least one holding has a current mark and no prior one — the
+            // V1 facade exposes no historical chain — so a day figure would be
+            // a partial sum wearing a whole number's clothes.
+            <div className="num mt-1 text-[15px] font-bold text-ink-muted">
+              — <span className="text-[11px] font-medium">today · no prior mark for every holding</span>
+            </div>
+          ) : (
+            <div
+              className={`num mt-1 text-[15px] font-bold ${positive ? 'text-up' : 'text-down'}`}
+            >
+              {formatSignedMoney(periodReturn)} ({formatSignedPercent(periodReturnPct)}){' '}
+              <span className="font-medium text-ink-muted">
+                {period === '1D' ? 'today' : `over ${period}`}
+              </span>
+            </div>
+          )}
         </div>
         <PeriodSelector value={period} onChange={setPeriod} positive={positive} />
       </div>
@@ -162,6 +183,32 @@ export function PortfolioPage() {
                 ? ' · older history is missing (plt caps lists at 500 rows)'
                 : ''}
             </p>
+
+            {/* ---------- current marked NAV: a separate stat, never a point
+                on the line above (plan §3.1, "one equity basis per chart").
+                The curve is realised P&L accumulated at each close; this is
+                the book marked right now. Adding one to the other, or scaling
+                the curve by it, double-counts. ---------- */}
+            {performance.basis === 'settled-equity' ? (
+              <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-xl border border-line bg-white/[0.03] px-3 py-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold tracking-[0.07em] text-ink-muted uppercase">
+                    Current marked value
+                  </span>
+                  <ProvenanceTag
+                    provenance={totals.fullyMarked ? totals.provenance : 'synthetic'}
+                  />
+                </div>
+                <span className="num text-[14px] font-extrabold text-ink">
+                  {formatMoney(totals.marketValue + (meta?.cash ?? 0))}
+                </span>
+                <p className="w-full text-[9.5px] leading-snug text-ink-muted">
+                  {totals.fullyMarked
+                    ? 'Open positions at the latest chain marks, plus cash. A different basis from the settled curve above — deliberately not drawn on it.'
+                    : 'Some holdings have no server mark and are held at their entry price, so this total is an estimate — not a quote. Different basis from the settled curve above.'}
+                </p>
+              </div>
+            ) : null}
           </>
         ) : (
           <Skeleton className="h-[260px] rounded-2xl" />

@@ -32,6 +32,7 @@ import { adjustPlanFromPrompt, parseMaxAmountFromPrompt } from '@/lib/planPrompt
 import { usePrice, usePrices } from '@/store/priceStore'
 import { useUiStore } from '@/store/uiStore'
 import { computeTotals } from '@/lib/portfolioMath'
+import { useOptionMarks } from '@/hooks/marketQueries'
 import { optionMark } from '@/lib/optionMath'
 
 const ADD_PLAN_LIMIT = 3
@@ -68,7 +69,8 @@ export function PositionPlanSheet({
   const prices = usePrices()
   const { data: accountPositions } = usePositions(accountId)
   const { data: portfolioMeta } = usePortfolioMeta(accountId)
-  const portfolioMarketValue = computeTotals(accountPositions ?? [], prices).marketValue
+  const { marks } = useOptionMarks(accountPositions)
+  const portfolioMarketValue = computeTotals(accountPositions ?? [], prices, marks).marketValue
   const sizing = {
     balance: portfolioMarketValue + (portfolioMeta?.cash ?? 0),
     cash: portfolioMeta?.cash ?? 0,

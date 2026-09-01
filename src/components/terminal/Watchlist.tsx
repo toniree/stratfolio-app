@@ -4,7 +4,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Plus, Search } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { SYMBOLS } from '@/api/mock/seededData'
-import { usePrices } from '@/store/priceStore'
+import { usePrices, useTrackedSymbols } from '@/store/priceStore'
 import { useTerminalStore } from '@/store/terminalStore'
 import { Sparkline } from '@/components/charts/Sparkline'
 
@@ -22,6 +22,11 @@ export function Watchlist({ className }: { className?: string }) {
   const setSymbol = useTerminalStore((s) => s.setSymbol)
   const navigate = useNavigate()
   const [watchlist, setWatchlist] = useState(DEFAULT_WATCHLIST)
+  // The rail stays a local tape (plan §3.8) — adding a ticker here must never
+  // touch the AI's ActiveUniverse — but its quotes come from whichever source
+  // is bound, so the live provider is told which symbols the rail wants. One
+  // the dataset does not serve simply never gets a row.
+  useTrackedSymbols(useMemo(() => watchlist.map((item) => item.symbol), [watchlist]))
   const [query, setQuery] = useState('')
   const available = useMemo(() => {
     const included = new Set(watchlist.map((item) => item.symbol))

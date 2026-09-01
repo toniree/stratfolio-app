@@ -19,6 +19,14 @@ import { describe, expect, it } from 'vitest'
 
 const HTTP_DIR = join(import.meta.dirname)
 
+/**
+ * The live quote provider lives outside `src/api/http/**` — it is a source, not
+ * an adapter — but it is live code on exactly the same footing, and the
+ * simulator it replaces sits in the very same directory. It is guarded here
+ * too, so a stray `import { SYMBOLS }` cannot creep in from next door.
+ */
+const EXTRA_LIVE_SOURCES = [join(HTTP_DIR, '..', 'marketData', 'PollingQuoteProvider.ts')]
+
 const FORBIDDEN: { pattern: RegExp; why: string }[] = [
   { pattern: /['"][^'"]*api\/mock\//, why: 'demo fixtures (src/api/mock/**)' },
   { pattern: /\bseededData\b/, why: 'seededData' },
@@ -46,7 +54,7 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe('D4 import boundary', () => {
-  const files = sourceFiles(HTTP_DIR)
+  const files = [...sourceFiles(HTTP_DIR), ...EXTRA_LIVE_SOURCES]
 
   it('finds the adapter sources it is meant to guard', () => {
     expect(files.length).toBeGreaterThan(0)

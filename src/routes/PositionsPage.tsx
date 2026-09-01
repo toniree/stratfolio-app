@@ -3,6 +3,7 @@ import { useUiStore } from '@/store/uiStore'
 import { usePrices } from '@/store/priceStore'
 import { usePerformance, usePortfolioMeta, usePositions } from '@/hooks/queries'
 import { computeTotals } from '@/lib/portfolioMath'
+import { useOptionMarks } from '@/hooks/marketQueries'
 import { BrokerageFilter } from '@/components/portfolio/BrokerageFilter'
 import { PositionList } from '@/components/positions/PositionList'
 import {
@@ -25,7 +26,11 @@ export function PositionsPage() {
   const { data: meta } = usePortfolioMeta(accountId)
   const { data: performance } = usePerformance(accountId, summaryPeriod)
 
-  const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  const { marks } = useOptionMarks(positions)
+  const totals = useMemo(
+    () => computeTotals(positions ?? [], prices, marks),
+    [positions, prices, marks],
+  )
 
   const counts = useMemo(() => {
     const result: Record<string, number> = {}

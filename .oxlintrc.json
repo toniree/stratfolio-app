@@ -4,7 +4,7 @@
   "ignorePatterns": ["dist", "coverage", "node_modules", "public/service-worker.js"],
   "overrides": [
     {
-      "files": ["src/api/http/**"],
+      "files": ["src/api/http/**", "src/api/marketData/PollingQuoteProvider.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",

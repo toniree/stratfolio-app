@@ -7,7 +7,14 @@
  * an error the UI renders.
  */
 
-export type DataDomain = 'portfolio' | 'ideas' | 'planner' | 'news' | 'assistant' | 'universe'
+export type DataDomain =
+  | 'portfolio'
+  | 'ideas'
+  | 'planner'
+  | 'news'
+  | 'assistant'
+  | 'universe'
+  | 'market'
 
 export type DataMode = 'mock' | 'live'
 
@@ -33,6 +40,7 @@ const FLAG: Record<DataDomain, string> = {
   news: 'VITE_DATA_NEWS',
   assistant: 'VITE_DATA_ASSISTANT',
   universe: 'VITE_DATA_UNIVERSE',
+  market: 'VITE_DATA_MARKET',
 }
 
 type EnvBag = Record<string, string | boolean | undefined>
@@ -66,6 +74,41 @@ export function hasLiveDomain(env: EnvBag = readEnv()): boolean {
 export function serviceBase(service: ServiceId, env: EnvBag = readEnv()): string {
   const override = env[`VITE_${service.toUpperCase()}_BASE`]
   return typeof override === 'string' && override.length > 0 ? override : SERVICE_BASE[service]
+}
+
+/**
+ * Symbols the live quote provider polls, from `VITE_MARKET_SYMBOLS`.
+ *
+ * A request list, not data: a symbol the bound dataset does not serve simply
+ * never appears in the price map, and nothing renders for it. The default is
+ * deliberately short — one snapshot request per symbol per poll — and is *not*
+ * read from the mock seed book, which live code may not import (D4).
+ */
+export const DEFAULT_MARKET_SYMBOLS: readonly string[] = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'MSFT']
+
+export function marketSymbols(env: EnvBag = readEnv()): string[] {
+  const raw = env.VITE_MARKET_SYMBOLS
+  if (typeof raw !== 'string' || raw.trim() === '') return [...DEFAULT_MARKET_SYMBOLS]
+  const parsed = raw
+    .split(',')
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter((symbol) => symbol.length > 0)
+  return parsed.length > 0 ? [...new Set(parsed)] : [...DEFAULT_MARKET_SYMBOLS]
+}
+
+/** Quote poll cadence in ms (D8). Applied only while the tab is visible. */
+export function quotePollMs(env: EnvBag = readEnv()): number {
+  const raw = env.VITE_MARKET_QUOTE_POLL_MS
+  const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN
+  return Number.isFinite(parsed) && parsed >= 1000 ? parsed : 5_000
+}
+
+/** Chain poll cadence in ms. Deliberately much slower than quotes: a chain
+ *  request is orders of magnitude more expensive than a snapshot (D8). */
+export function chainPollMs(env: EnvBag = readEnv()): number {
+  const raw = env.VITE_MARKET_CHAIN_POLL_MS
+  const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN
+  return Number.isFinite(parsed) && parsed >= 5000 ? parsed : 60_000
 }
 
 /** Request timeout in ms. bkt backtests are 202-but-synchronous (§7.6) and

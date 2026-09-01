@@ -280,7 +280,10 @@ export function thesisStatLine(id: ThesisStatField, a: ThesisAnalytics): ThesisS
         tone: a.spreadPct <= 5 ? 'up' : 'down',
       }
     case 'openInterest':
-      return { label, value: compactCount(a.openInterest) }
+      // Absent for every live contract: open interest is a fact about a real
+      // market the browser cannot know, and the seeded stand-in was deleted
+      // with the rest of the in-browser IV/OI fabrication (§6).
+      return { label, value: a.openInterest === undefined ? '—' : compactCount(a.openInterest) }
     case 'dte':
       return { label, value: `${a.daysToExpiry}d` }
     case 'breakeven':

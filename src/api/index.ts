@@ -16,6 +16,10 @@ import { mockAssistantApi } from '@/api/mock/MockAssistantApi'
 import { mockActiveUniverseApi } from '@/api/mock/MockActiveUniverseApi'
 import { httpPortfolioApi } from '@/api/http/HttpPortfolioApi'
 import { httpActiveUniverseApi } from '@/api/http/HttpActiveUniverseApi'
+import { httpMarketDataApi } from '@/api/http/HttpMarketDataApi'
+import { marketDataSimulator } from '@/api/marketData/MarketDataSimulator'
+import { PollingQuoteProvider } from '@/api/marketData/PollingQuoteProvider'
+import type { MarketDataApi, QuoteProvider } from '@/api/marketData/types'
 import { isLive } from '@/api/http/env'
 
 /**
@@ -39,6 +43,22 @@ export const portfolioApi: PortfolioApi = isLive('portfolio') ? httpPortfolioApi
 export const activeUniverseApi: ActiveUniverseApi = isLive('universe')
   ? httpActiveUniverseApi
   : mockActiveUniverseApi
+
+/**
+ * Market data (APP-108, Wave B0).
+ *
+ * `quoteProvider` feeds the price store; `marketDataApi` is the request/response
+ * seam for bars, chains and status. In mock mode the API seam is `null` rather
+ * than a simulated implementation: chains and bars are the surfaces the app
+ * used to fabricate in the browser, and a "mock market API" would be the same
+ * fabrication wearing a live-looking interface. Hooks check for `null` and the
+ * mock components keep their own clearly labelled synthetic renderings.
+ */
+export const quoteProvider: QuoteProvider = isLive('market')
+  ? new PollingQuoteProvider()
+  : marketDataSimulator
+
+export const marketDataApi: MarketDataApi | null = isLive('market') ? httpMarketDataApi : null
 
 // Blocked on backend capability, or on a later wave — see `.env.example` and
 // `../stratfolio/docs/plans/APP_HOOKUP_BACKEND_GAPS_V1.md`.
