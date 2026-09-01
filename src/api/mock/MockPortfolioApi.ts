@@ -1,5 +1,6 @@
 import type {
   ActivityEvent,
+  ExitRequest,
   Order,
   OrderRequest,
   PerformancePeriod,
@@ -222,6 +223,30 @@ export class MockPortfolioApi implements PortfolioApi {
     // Deliberately non-destructive: submitting an order never removes the
     // position. A real fill would arrive asynchronously from the broker.
     return order
+  }
+
+  /**
+   * The demo book's version of a hand close.
+   *
+   * The demo ticket keeps its own simulated flow — quantity slider, limit
+   * price, routing animation — and still goes through `submitOrder`. This
+   * exists so the seam is total, and so a component that reaches for the exit
+   * path in a mock build gets the demo's own simulated sell rather than a
+   * crash: the whole position, at its last simulated mark.
+   */
+  async requestExit(request: ExitRequest): Promise<Order> {
+    const position = this.positions.find((p) => p.id === request.positionId)
+    if (!position) throw new Error(`Unknown position: ${request.positionId}`)
+    return this.submitOrder({
+      symbol: position.symbol,
+      side: 'SELL',
+      intent: 'close',
+      quantity: position.quantity,
+      estimatedPrice: position.lastPrice ?? position.avgCost,
+      positionId: position.id,
+      brokerageId: position.brokerageId,
+      idempotencyKey: request.idempotencyKey,
+    })
   }
 
   async addPositionFromIdea(

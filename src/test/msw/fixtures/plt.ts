@@ -461,6 +461,60 @@ export const EXECUTION_PLATFORM_ERROR_FIXTURE: BktExecutionOutcome = {
   platform_error: 'platform unreachable: connection refused',
 }
 
+/**
+ * A user close that filled — `POST /executions/exits` (contracts §17).
+ *
+ * Note what the service assigns and the caller never sends: `action: "EXIT"`,
+ * `exit_reason: "USER_CLOSE"`, a SELL fill side, and a price measured from the
+ * quote at close time. Note also `replayed: false` — the exits route rebuilds
+ * this body with `outcome_from_record`, so the flag is false even on a replay
+ * and only the HTTP status distinguishes one.
+ */
+export const EXIT_FILLED_FIXTURE: BktExecutionOutcome = {
+  execution_id: 'ex000004-0000-4000-8000-000000000004',
+  trade_plan_id: '99887766-5544-4332-8211-000fedcba987',
+  decision_episode_id: null,
+  status: 'FILLED',
+  action: 'EXIT',
+  contract: {
+    occ_symbol: 'MU270115C00150000',
+    option_type: 'CALL',
+    strike: '150.00',
+    expiration: '2027-01-15',
+    dte: 137,
+    underlying_price: '162.10',
+  },
+  fill: {
+    side: 'SELL',
+    quantity: 3,
+    price: '18.45',
+    notional: '5535.00',
+    contract_multiplier: 100,
+    fees: '0.00',
+    cash_effect: '5535.00',
+  },
+  reason_code: null,
+  exit_reason: 'USER_CLOSE',
+  fill_model: 'MIDPOINT_WITH_SLIPPAGE',
+  determinism_hash: 'c0ffee01',
+  silent_trade_id: 'aa11bb22-cc33-4d44-8e55-ff66aa77bb88',
+  reported_to_platform: true,
+  platform_error: null,
+  executed_at: '2026-08-31T16:20:00Z',
+  replayed: false,
+}
+
+/** A close that did not fill: HTTP 201, position still OPEN, not an error. */
+export const EXIT_NO_FILL_FIXTURE: BktExecutionOutcome = {
+  ...EXIT_FILLED_FIXTURE,
+  execution_id: 'ex000005-0000-4000-8000-000000000005',
+  status: 'NO_FILL',
+  fill: null,
+  reason_code: 'SPIKE_NO_FILL',
+  reported_to_platform: false,
+  executed_at: '2026-08-31T16:21:30Z',
+}
+
 /** bkt's own 422, distinct from plt's: the plan reached bkt and was refused. */
 export const BKT_REJECTION_PROBLEM = {
   type: 'https://stratfolio.local/problems/trade-plan-rejected',

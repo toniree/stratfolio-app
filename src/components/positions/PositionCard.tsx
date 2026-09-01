@@ -183,8 +183,9 @@ export function PositionCard({ valuation }: { valuation: PositionValuation }) {
       </div>
 
       {/* Live mode gets the silent-execution ticket: contract identity comes
-          off the chain and closing is refused (HKP-BKT-1). The demo keeps its
-          scripted buy/sell ticket, which trades against the demo book. */}
+          off the chain, and closing goes through bkt's user-exit route rather
+          than this ticket (APP-114, §17). The demo keeps its scripted buy/sell
+          ticket, which trades against the demo book. */}
       {isLive('portfolio') ? (
         <OpenOptionTicket
           symbol={position.symbol}

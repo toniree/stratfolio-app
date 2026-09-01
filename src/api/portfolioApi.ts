@@ -1,6 +1,7 @@
 import type {
   ActiveUniverse,
   ActivityEvent,
+  ExitRequest,
   Order,
   OrderRequest,
   PerformancePeriod,
@@ -33,6 +34,17 @@ export interface PortfolioApi {
   getOutlook(accountId: string): Promise<PortfolioOutlook>
   getPerformance(accountId: string, period: PerformancePeriod): Promise<PerformanceSeries>
   submitOrder(request: OrderRequest): Promise<Order>
+  /**
+   * Close a position the user is holding, now (APP-114).
+   *
+   * Its own seam method rather than a `submitOrder({intent:'close'})`, because
+   * an exit is a different operation with a different wire: bkt's
+   * `POST /executions/exits` takes a silent-trade id and an idempotency key and
+   * **refuses every other field** (contracts §17). There is no limit price to
+   * pass — the deterministic exit fill model prices the close off the current
+   * mnd quote — no side to choose, and no partial quantity.
+   */
+  requestExit(request: ExitRequest): Promise<Order>
   addPositionFromIdea(accountId: string, ideaId: string, quantity: number): Promise<Position>
   getActivity(): Promise<ActivityEvent[]>
   /**

@@ -4,6 +4,7 @@ import {
   entryBand,
   toCreateTradePlanRequest,
   toOrderFromExecution,
+  toOrderFromExit,
   toOrderFromRejection,
 } from '@/api/http/adapters/execution'
 import { ApiError } from '@/api/http/problem'
@@ -12,6 +13,8 @@ import {
   EXECUTION_FILLED_FIXTURE,
   EXECUTION_NO_FILL_FIXTURE,
   EXECUTION_PLATFORM_ERROR_FIXTURE,
+  EXIT_FILLED_FIXTURE,
+  EXIT_NO_FILL_FIXTURE,
   POLICY_REJECTION_PROBLEM,
 } from '@/test/msw/fixtures/plt'
 import type { OrderRequest } from '@/api/types'
@@ -151,5 +154,52 @@ describe('toOrderFromRejection', () => {
     expect(order.tradePlanId).toBe(POLICY_REJECTION_PROBLEM.trade_plan_id)
     expect(order.sessionOnly).toBe(false)
     expect(order.price).toBeUndefined()
+  })
+})
+
+describe('toOrderFromExit — the user\u2019s own close (§17)', () => {
+  const CONTEXT = { symbol: 'mu', quantity: 3, replayed: false, submittedAt: '2026-08-31T16:19:00Z' }
+
+  it('takes the fill price from the model and the exit reason from the server', () => {
+    const order = toOrderFromExit(EXIT_FILLED_FIXTURE, CONTEXT)
+    expect(order.status).toBe('FILLED')
+    expect(order.side).toBe('SELL')
+    expect(order.price).toBe(18.45)
+    expect(order.estimatedValue).toBe(5535)
+    // Server-assigned in every case — a caller never names one.
+    expect(order.exitReason).toBe('USER_CLOSE')
+    expect(order.silentTradeId).toBe(EXIT_FILLED_FIXTURE.silent_trade_id)
+    expect(order.submittedAt).toBe('2026-08-31T16:20:00Z')
+    expect(order.sessionOnly).toBe(false)
+  })
+
+  it('leaves a NO_FILL priceless and counts the attempt, not a sale', () => {
+    const order = toOrderFromExit(EXIT_NO_FILL_FIXTURE, CONTEXT)
+    expect(order.status).toBe('NO_FILL')
+    // Never a zero and never the mark the user was looking at.
+    expect(order.price).toBeUndefined()
+    expect(order.estimatedValue).toBeUndefined()
+    expect(order.reasonCode).toBe('SPIKE_NO_FILL')
+    expect(order.quantity).toBe(3)
+  })
+
+  it('takes `replayed` from the caller, because the wire flag stays false', () => {
+    // bkt rebuilds the exits response with `outcome_from_record`, whose
+    // `replayed` defaults to false; the HTTP 200 is the only replay signal.
+    const order = toOrderFromExit({ ...EXIT_FILLED_FIXTURE, replayed: false }, {
+      ...CONTEXT,
+      replayed: true,
+    })
+    expect(order.replayed).toBe(true)
+  })
+
+  it('keeps a close plt never acknowledged out of durable history', () => {
+    const order = toOrderFromExit(
+      { ...EXIT_FILLED_FIXTURE, reported_to_platform: false, platform_error: 'plt down' },
+      CONTEXT,
+    )
+    expect(order.reportedToPlatform).toBe(false)
+    expect(order.platformError).toBe('plt down')
+    expect(order.sessionOnly).toBe(true)
   })
 })

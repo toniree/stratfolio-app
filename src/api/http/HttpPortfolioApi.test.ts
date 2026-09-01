@@ -7,11 +7,13 @@ import {
   EXECUTION_FILLED_FIXTURE,
   EXECUTION_NO_FILL_FIXTURE,
   EXECUTION_PLATFORM_ERROR_FIXTURE,
+  EXIT_FILLED_FIXTURE,
+  EXIT_NO_FILL_FIXTURE,
   POLICY_REJECTION_PROBLEM,
   SILENT_TRADE_CLOSED_FIXTURE,
   TRADE_PLAN_VALIDATED_FIXTURE,
 } from '@/test/msw/fixtures/plt'
-import type { OrderRequest } from '@/api/types'
+import type { ExitRequest, OrderRequest } from '@/api/types'
 import { server, useMswServer } from '@/test/msw/server'
 
 useMswServer()
@@ -260,7 +262,7 @@ describe('HttpPortfolioApi.submitOrder — open', () => {
     await expect(new HttpPortfolioApi().submitOrder(OPEN)).rejects.toBeInstanceOf(ApiError)
   })
 
-  it('refuses to close in live mode (HKP-BKT-1) without calling anything', async () => {
+  it('refuses to close *as an order*: a close is requestExit, not a plan', async () => {
     const api = new HttpPortfolioApi()
     for (const request of [
       { ...OPEN, intent: 'close' as const },
@@ -269,7 +271,7 @@ describe('HttpPortfolioApi.submitOrder — open', () => {
       const error = (await api.submitOrder(request).catch((e: unknown) => e)) as ApiError
       expect(error).toBeInstanceOf(ApiError)
       expect(error.status).toBe(501)
-      expect(error.problem.gap).toBe('HKP-BKT-1')
+      expect(error.problem.gap).toBe('APP-114')
     }
   })
 
@@ -277,6 +279,129 @@ describe('HttpPortfolioApi.submitOrder — open', () => {
     const error = (await new HttpPortfolioApi()
       .submitOrder({ ...OPEN, contract: undefined })
       .catch((e: unknown) => e)) as ApiError
+    expect(error.status).toBe(501)
+  })
+})
+
+/* ------------------------------------------------ the exit path (APP-114) -- */
+
+const EXIT: ExitRequest = {
+  positionId: '8b7a6c5d-4e3f-4a2b-9c8d-7e6f5a4b3c2d',
+  silentTradeId: 'aa11bb22-cc33-4d44-8e55-ff66aa77bb88',
+  symbol: 'mu',
+  quantity: 3,
+  idempotencyKey: 'exit-fixed-key',
+}
+
+describe('HttpPortfolioApi.requestExit', () => {
+  it('sends the whole body and nothing else — extra fields are a 422 (§17)', async () => {
+    let body: Record<string, unknown> = {}
+    server.use(
+      http.post('/bkt/api/v1/executions/exits', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(EXIT_FILLED_FIXTURE, { status: 201 })
+      }),
+    )
+    await new HttpPortfolioApi().requestExit(EXIT)
+    // Two keys, exactly. No exit_price, no exit_reason, no quantity, no side:
+    // bkt's ExitRequest is `extra="forbid"` and would refuse the request.
+    expect(Object.keys(body).sort()).toEqual(['idempotency_key', 'silent_trade_id'])
+    expect(body.silent_trade_id).toBe(EXIT.silentTradeId)
+    // bkt takes idempotency in the *body*; plt takes a header (§7.7).
+    expect(body.idempotency_key).toBe('exit-fixed-key')
+  })
+
+  it('renders a fill at the model’s price, not at any price the app supplied', async () => {
+    const order = await new HttpPortfolioApi().requestExit(EXIT)
+    expect(order.status).toBe('FILLED')
+    expect(order.side).toBe('SELL')
+    // 18.45 is the fill model's number off the close-time quote. Nothing in
+    // the request could have influenced it.
+    expect(order.price).toBe(18.45)
+    expect(order.estimatedValue).toBe(5535)
+    expect(order.exitReason).toBe('USER_CLOSE')
+    expect(order.replayed).toBe(false)
+    // plt was told, so the close is in the system of record.
+    expect(order.sessionOnly).toBe(false)
+  })
+
+  it('treats NO_FILL as a successful outcome that left the position open', async () => {
+    server.use(
+      http.post('/bkt/api/v1/executions/exits', () =>
+        HttpResponse.json(EXIT_NO_FILL_FIXTURE, { status: 201 }),
+      ),
+    )
+    const order = await new HttpPortfolioApi().requestExit(EXIT)
+    expect(order.status).toBe('NO_FILL')
+    // No fill, so no price and no proceeds — never a zero, never the mark.
+    expect(order.price).toBeUndefined()
+    expect(order.estimatedValue).toBeUndefined()
+    expect(order.reasonCode).toBe('SPIKE_NO_FILL')
+    // The quantity still describes what the attempt was for.
+    expect(order.quantity).toBe(3)
+  })
+
+  it('reads the 200 replay from the status, because the body’s flag stays false', async () => {
+    server.use(
+      // Exactly what bkt sends on a replay: `outcome_from_record(record)`
+      // leaves `replayed: false` in the body, and only the code says 200.
+      http.post('/bkt/api/v1/executions/exits', () =>
+        HttpResponse.json({ ...EXIT_FILLED_FIXTURE, replayed: false }, { status: 200 }),
+      ),
+    )
+    const order = await new HttpPortfolioApi().requestExit(EXIT)
+    expect(order.replayed).toBe(true)
+    expect(order.status).toBe('FILLED')
+  })
+
+  it.each([
+    [404, 'silent-trade-not-found'],
+    [409, 'silent-trade-not-open'],
+    [503, 'market-data-unavailable'],
+  ])('surfaces a %s as a typed ApiError rather than an outcome', async (status, slug) => {
+    server.use(
+      http.post('/bkt/api/v1/executions/exits', () =>
+        HttpResponse.json(
+          { type: `https://stratfolio.local/problems/${slug}`, status, title: slug },
+          { status, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    )
+    const error = (await new HttpPortfolioApi()
+      .requestExit(EXIT)
+      .catch((e: unknown) => e)) as ApiError
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.status).toBe(status)
+    expect(error.kind).toBe(slug)
+  })
+
+  it('keeps an unreported close in session history, since plt never heard it', async () => {
+    const api = new HttpPortfolioApi()
+    server.use(
+      http.post('/bkt/api/v1/executions/exits', () =>
+        HttpResponse.json(
+          {
+            ...EXIT_FILLED_FIXTURE,
+            reported_to_platform: false,
+            platform_error: 'platform unreachable: connection refused',
+          },
+          { status: 201 },
+        ),
+      ),
+      http.get('/plt/api/v1/silent-trades', () => HttpResponse.json([])),
+      http.get('/plt/api/v1/trade-plans', () => HttpResponse.json([])),
+    )
+    const order = await api.requestExit(EXIT)
+    expect(order.sessionOnly).toBe(true)
+    const history = await api.getOrders()
+    expect(history.some((o) => o.id === EXIT_FILLED_FIXTURE.execution_id)).toBe(true)
+  })
+
+  it('refuses a position with no silent trade instead of inventing an id', async () => {
+    const error = (await new HttpPortfolioApi()
+      .requestExit({ ...EXIT, silentTradeId: undefined })
+      .catch((e: unknown) => e)) as ApiError
+    expect(error).toBeInstanceOf(ApiError)
     expect(error.status).toBe(501)
   })
 })

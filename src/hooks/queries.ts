@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { activeUniverseApi, ideasApi, newsApi, plannerApi, portfolioApi } from '@/api'
-import type { OrderRequest, PerformancePeriod } from '@/api/types'
+import type { ExitRequest, OrderRequest, PerformancePeriod } from '@/api/types'
 import type { CreatePlannerIdeaInput, PlannerIdea, UpdatePlannerIdeaInput } from '@/api/newsTypes'
 import type { AddUniverseSymbolInput } from '@/api/portfolioApi'
 import { useOrderToastStore } from '@/store/orderToastStore'
@@ -122,6 +122,31 @@ export function useSubmitOrder() {
       void qc.invalidateQueries({ queryKey: queryKeys.activity })
       void qc.invalidateQueries({ queryKey: queryKeys.orders })
       void qc.invalidateQueries({ queryKey: queryKeys.plannerIdeas })
+    },
+  })
+}
+
+/**
+ * Close a held position at the user's request (APP-114).
+ *
+ * Its own mutation rather than a flavour of `useSubmitOrder`, because the
+ * outcomes mean different things: a `NO_FILL` here leaves the position OPEN
+ * and still yours, where a NO_FILL on entry means nothing was opened at all.
+ * The invalidation set matches a submit's because a filled close moves
+ * everything a filled open does — positions, cash, cost basis, the settled
+ * curve, activity — minus the planner, which an exit never touches.
+ */
+export function useRequestExit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (request: ExitRequest) => portfolioApi.requestExit(request),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['positions'] })
+      void qc.invalidateQueries({ queryKey: ['portfolio-meta'] })
+      void qc.invalidateQueries({ queryKey: ['performance'] })
+      void qc.invalidateQueries({ queryKey: queryKeys.accounts })
+      void qc.invalidateQueries({ queryKey: queryKeys.activity })
+      void qc.invalidateQueries({ queryKey: queryKeys.orders })
     },
   })
 }

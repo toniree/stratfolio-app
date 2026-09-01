@@ -131,6 +131,11 @@ export function toPosition(wire: PltPosition): Position {
     // a permanently flat one.
     lastPrice: decimal(wire.last_price),
     unrealizedPnl: decimal(wire.unrealized_pnl),
+    // The handle a hand close needs: bkt's exit route takes a silent trade id
+    // and nothing else (§17). plt omits it on a position it never linked to a
+    // trade, and the close control is disabled for exactly those rows rather
+    // than sending an id the app invented.
+    silentTradeId: text(wire.silent_trade_id),
     // plt records a `decision_episode_id`, not the episode's content, and
     // service-ai exposes no episode read API (HKP-AI-1) — so there is nothing
     // to build an AIAssessment from yet.

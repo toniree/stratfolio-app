@@ -135,6 +135,16 @@ export interface Position {
   /** Optional private note; cards prefer this over the generated AI summary. */
   userNote?: string
   ai?: AIAssessment
+  /**
+   * The plt silent trade behind this position.
+   *
+   * The only handle bkt's exit route accepts (contracts §17): a user close is
+   * `POST /executions/exits {silent_trade_id, …}` — never a position id, never
+   * an OCC symbol. Absent on demo-book positions and on any live row plt did
+   * not link to a trade, and where it is absent closing by hand genuinely is
+   * unavailable rather than merely unimplemented.
+   */
+  silentTradeId?: string
   provenance?: Provenance
 }
 
@@ -327,10 +337,10 @@ export interface OrderRequest {
   /**
    * Whether this opens exposure or closes an existing position.
    *
-   * Closing is **blocked in live mode** (HKP-BKT-1): plt's `/close` demands
-   * real fill facts and no user-initiated exit route exists, so a ticket must
-   * never supply an estimate. BKT-018 is building one; wiring it is a
-   * follow-up task, not this one.
+   * Closing does not come through here in live mode: it is `ExitRequest` and
+   * `requestExit`. bkt prices an exit itself from the current quote and its
+   * body refuses a price, a side or a partial quantity (§17), none of which
+   * this shape could express honestly.
    */
   intent?: 'open' | 'close'
   /** Required to open in live mode — see `OrderContract`. */
@@ -346,6 +356,42 @@ export interface OrderRequest {
    * returned NO_FILL/REJECTED is a new operation and mints a new key.
    */
   idempotencyKey?: string
+}
+
+/**
+ * "Close this position, now, at whatever the model says it is worth."
+ *
+ * Deliberately **not** an `OrderRequest` (APP-114). bkt's exit route takes the
+ * whole body and nothing else (`extra: forbid`, contracts §17): a price, a
+ * reason, a quantity or a side in that body is a 422, not a field politely
+ * ignored. The exit price is measured server-side from the current mnd quote
+ * through the configured fill model, the reason is fixed to `USER_CLOSE`, and
+ * the close is always for the whole trade. Reusing the order shape would have
+ * meant carrying four fields the wire refuses and one — a limit price — the
+ * user cannot influence at all.
+ */
+export interface ExitRequest {
+  /** The app-side position, used for labels and for the demo book's own close. */
+  positionId: string
+  /** plt's silent trade — bkt's only handle on the position (§17). */
+  silentTradeId?: string
+  /**
+   * The position's own ticker and contract count.
+   *
+   * **Never sent to bkt** — the exit body is closed and carries neither. They
+   * label the returned order in the two cases the response cannot: a NO_FILL
+   * has no fill to read a quantity from, and no `ExecutionOutcome` carries an
+   * underlying ticker at all.
+   */
+  symbol: string
+  quantity: number
+  /**
+   * Required by bkt for exits, unlike on the entry path: a close is a live
+   * operation a human retries on a slow network, and the retry must be
+   * answerable with the recorded outcome rather than a second attempt against
+   * a newer quote (D6, §17).
+   */
+  idempotencyKey: string
 }
 
 /**
@@ -385,8 +431,24 @@ export interface Order {
   /** bkt's own reason for a NO_FILL (`SPIKE_NO_FILL`, `ENTRY_PRICE_ABOVE_BAND`)
    *  or for a refusal, verbatim. */
   reasonCode?: string
-  /** The silent trade this order created, when it filled and plt recorded it. */
+  /** The silent trade this order created, when it filled and plt recorded it.
+   *  On an exit, the trade this order *closed*. */
   silentTradeId?: string
+  /**
+   * bkt's server-assigned exit reason (`USER_CLOSE` for a hand close). Present
+   * on EXIT outcomes only; a caller never names one (contracts §17).
+   */
+  exitReason?: string
+  /**
+   * This response replayed an outcome recorded earlier under the same
+   * idempotency key — bkt answered 200, nothing was re-simulated, and no
+   * second attempt was made against a newer quote.
+   *
+   * Read from the **HTTP status**, not the body: the exits route builds its
+   * body with `outcome_from_record(...)`, which leaves the wire's own
+   * `replayed` flag `false` even on a replay.
+   */
+  replayed?: boolean
   /**
    * True when nothing durable exists for this outcome anywhere — a `NO_FILL`,
    * or a fill plt never heard about. These rows live only in this session

@@ -77,14 +77,15 @@ export function PositionActionFooter({
         <button
           type="button"
           aria-label={`Exit the ${position.symbol} position`}
-          // Disabled, not hidden, against the live backend: the user should see
-          // that exiting exists and is not available yet (HKP-BKT-1), rather
-          // than wonder where the control went.
-          disabled={!isManualCloseAvailable()}
+          // Disabled, not hidden, for the one live row that cannot be exited:
+          // a position the platform service never linked to a silent trade has
+          // no id bkt's exit route can take. The user should see that exiting
+          // exists rather than wonder where the control went.
+          disabled={!isManualCloseAvailable(position)}
           title={
-            isManualCloseAvailable()
+            isManualCloseAvailable(position)
               ? undefined
-              : 'Manual exit is not available against the live backend yet (HKP-BKT-1).'
+              : 'This position is not linked to a silent trade, so the execution service cannot close it.'
           }
           onClick={() => setClosing(true)}
           className="grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96] disabled:opacity-40"

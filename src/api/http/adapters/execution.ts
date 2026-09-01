@@ -145,6 +145,72 @@ export function toOrderFromExecution(
 }
 
 /**
+ * bkt's EXIT `ExecutionOutcome` → the app's `Order` (APP-114, contracts §17).
+ *
+ * The three rules a close adds to the entry mapping:
+ *  - the **fill price is the model's**, off the current mnd quote through the
+ *    exit fill model. It is not the mark the user was looking at, and the
+ *    ticket says so; copying the screen price here would be the estimate §17
+ *    exists to keep out of the book.
+ *  - `NO_FILL` leaves the position **OPEN**. It is a successful 201 and a
+ *    durable `execution_log` row, so — unlike an entry NO_FILL — it is *not*
+ *    session-only invention; but no order row exists for it in plt either,
+ *    so it is retained for the session like every other bkt-only outcome.
+ *  - `replayed` comes from the HTTP status (200), not from the body: the
+ *    exits route rebuilds its response with `outcome_from_record`, which
+ *    leaves the wire flag `false` even when replaying.
+ */
+export function toOrderFromExit(
+  outcome: BktExecutionOutcome,
+  context: { symbol: string; quantity: number; replayed: boolean; submittedAt: string },
+): Order {
+  const fill = outcome.fill ?? undefined
+  const price = decimal(fill?.price)
+  const quantity = integer(fill?.quantity) ?? context.quantity
+  const multiplier = integer(fill?.contract_multiplier) ?? 100
+  const filled = outcome.status === 'FILLED'
+  const reported = outcome.reported_to_platform !== false
+  // bkt computes the notional in decimal arithmetic and sends it. Preferring
+  // it over `price × quantity × multiplier` avoids re-deriving money in
+  // binary floating point, where 18.45 × 300 is 5534.999999999999.
+  const proceeds =
+    decimal(fill?.notional) ?? (price === undefined ? undefined : price * quantity * multiplier)
+
+  return {
+    id: outcome.execution_id,
+    executionId: outcome.execution_id,
+    symbol: context.symbol.toUpperCase(),
+    // A close of a long option is a sell to close. bkt fixes the side itself;
+    // this only echoes what it recorded.
+    side: 'SELL',
+    quantity,
+    price,
+    estimatedValue: proceeds,
+    status: outcome.status,
+    submittedAt: text(outcome.executed_at) ?? context.submittedAt,
+    reportedToPlatform: outcome.reported_to_platform,
+    platformError: text(outcome.platform_error),
+    reasonCode: text(outcome.reason_code),
+    exitReason: text(outcome.exit_reason),
+    replayed: context.replayed,
+    tradePlanId: outcome.trade_plan_id,
+    silentTradeId: text(outcome.silent_trade_id),
+    // Durable in bkt either way, but plt learns about it only when the close
+    // was reported: an unreported close is not in the system of record, and a
+    // NO_FILL closed nothing to record.
+    sessionOnly: !(filled && reported),
+    contractDetail: outcome.contract
+      ? contractLabel(
+          outcome.contract.option_type,
+          decimal(outcome.contract.strike) ?? 0,
+          outcome.contract.expiration,
+        )
+      : undefined,
+    provenance: 'live',
+  }
+}
+
+/**
  * A PolicyGate refusal → an `Order` with `status: 'REJECTED'`.
  *
  * A 422 is a *returned outcome*, not a transport failure: plt persisted the

@@ -1,5 +1,6 @@
 import type {
   ActivityEvent,
+  ExitRequest,
   Order,
   OrderRequest,
   PerformancePeriod,
@@ -10,7 +11,7 @@ import type {
   Position,
 } from '@/api/types'
 import type { PortfolioApi } from '@/api/portfolioApi'
-import { request } from '@/api/http/client'
+import { request, requestWithStatus } from '@/api/http/client'
 import { ApiError } from '@/api/http/problem'
 import {
   PLT_LIST_LIMIT_MAX,
@@ -20,7 +21,11 @@ import {
   type PltSilentTrade,
   type PltTradePlan,
 } from '@/api/http/wire/plt'
-import type { BktExecutionOutcome, BktExecutionRequest } from '@/api/http/wire/bkt'
+import type {
+  BktExecutionOutcome,
+  BktExecutionRequest,
+  BktExitRequest,
+} from '@/api/http/wire/bkt'
 import { decimal } from '@/api/http/wire/scalars'
 import { newIdempotencyKey } from '@/api/http/idempotency'
 import {
@@ -34,6 +39,7 @@ import {
 import {
   toCreateTradePlanRequest,
   toOrderFromExecution,
+  toOrderFromExit,
   toOrderFromRejection,
 } from '@/api/http/adapters/execution'
 
@@ -44,9 +50,10 @@ import {
  * on backend capability the plan does not let Wave A invent:
  *  - `submitOrder` opening needs the mnd chain for contract identity (Wave B0)
  *    plus the D11-pinned plan → execution path (APP-112);
- *  - `submitOrder` closing needs a user-initiated exit route that does not
- *    exist (HKP-BKT-1) — plt's `/close` demands real fill facts and a UI must
- *    never supply estimates;
+ *  - `submitOrder` closing stays refused, but closing itself is no longer
+ *    blocked: `requestExit` calls bkt's user-exit route (BKT-018, §17). What
+ *    is refused is closing *as an order* — with a price, a side and a partial
+ *    quantity — because that shape is exactly what the exit body forbids;
  *  - `addPositionFromIdea` is the same write behind a different door;
  *  - `getOutlook` has no endpoint at all (HKP-AI-5).
  *
@@ -181,16 +188,17 @@ export class HttpPortfolioApi implements PortfolioApi {
    * key, while a thrown `ApiError` means retry the *same* operation with the
    * same key and let the servers replay what they recorded (D6).
    *
-   * Closing is refused outright. plt's `/close` wants real fill facts and no
-   * user-initiated exit route exists (HKP-BKT-1); BKT-018 is building one and
-   * wiring it is a separate task.
+   * Closing does not come through here — it is `requestExit`. This path builds
+   * a *plan* with an entry band, a capital allocation and a quantity, none of
+   * which an exit has: bkt fixes the exit's reason, prices it off the current
+   * quote, and refuses a body carrying anything else (§17).
    */
   async submitOrder(orderRequest: OrderRequest): Promise<Order> {
     if (orderRequest.intent === 'close' || orderRequest.side === 'SELL') {
       this.unavailable(
         'submitOrder(close)',
-        'HKP-BKT-1',
-        'Closing a position needs a user-initiated exit route. plt’s /close records a fill that already happened, and a ticket must never supply an estimated one.',
+        'APP-114',
+        'A close is not an order here: use requestExit. bkt prices the exit itself from the current quote and refuses a body that names a price, a side or a partial quantity.',
       )
     }
     if (!orderRequest.contract) {
@@ -251,6 +259,63 @@ export class HttpPortfolioApi implements PortfolioApi {
     // A NO_FILL, or a fill plt never heard about, exists nowhere else
     // (HKP-BKT-4) — keep it for the session or order history forgets the user
     // ever attempted the trade.
+    if (order.sessionOnly) this.retainSessionOutcome(order)
+    return order
+  }
+
+  /**
+   * Close a held position at the user's request (APP-114, contracts §17).
+   *
+   * The body is the whole body: `{silent_trade_id, idempotency_key}`. bkt's
+   * `ExitRequest` is `extra="forbid"`, so a price, a reason or a quantity here
+   * is a 422 rather than a field politely ignored — and that is the point. The
+   * exit price is measured server-side from the current mnd quote through the
+   * exit fill model, and a browser has no fill facts to contribute.
+   *
+   * Outcomes vs failures, exactly as on the entry path (D6):
+   *  - **201 FILLED / NO_FILL** — a returned outcome. A NO_FILL left the
+   *    position OPEN and is not an error; a deliberate second attempt is a new
+   *    operation and mints a new key.
+   *  - **200** — this same `(silent_trade_id, idempotency_key)` already ran.
+   *    The recorded outcome is replayed verbatim; nothing was re-simulated.
+   *  - **404 / 409 / 503** — thrown as typed `ApiError`s. 409 means someone
+   *    else's exit stands (the monitor's, usually); 503 means nothing was
+   *    recorded and the position is unchanged.
+   */
+  async requestExit(exitRequest: ExitRequest): Promise<Order> {
+    if (!exitRequest.silentTradeId) {
+      this.unavailable(
+        'requestExit',
+        'HKP-PLT-7',
+        'This position is not linked to a silent trade, and the execution service closes silent trades by id. Nothing here can stand in for that id.',
+      )
+    }
+
+    const submittedAt = new Date().toISOString()
+    const { status, data } = await requestWithStatus<BktExecutionOutcome>(
+      'bkt',
+      '/api/v1/executions/exits',
+      {
+        method: 'POST',
+        // Two fields, and only two. See the doc comment — this is a contract,
+        // not an omission.
+        body: {
+          silent_trade_id: exitRequest.silentTradeId,
+          idempotency_key: exitRequest.idempotencyKey,
+        } satisfies BktExitRequest,
+      },
+    )
+
+    const order = toOrderFromExit(data, {
+      symbol: exitRequest.symbol,
+      quantity: exitRequest.quantity,
+      // 200 is the replay signal. The body's own `replayed` is false even on a
+      // replay, because the exits route rebuilds it from the durable row.
+      replayed: status === 200,
+      submittedAt,
+    })
+    // A close bkt recorded but plt never acknowledged, and a NO_FILL, both
+    // leave the app's order history with nothing to show (HKP-BKT-4).
     if (order.sessionOnly) this.retainSessionOutcome(order)
     return order
   }

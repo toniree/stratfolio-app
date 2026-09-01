@@ -2,6 +2,7 @@ import { HttpResponse, http } from 'msw'
 import {
   ACTIVITY_FIXTURE,
   EXECUTION_FILLED_FIXTURE,
+  EXIT_FILLED_FIXTURE,
   PORTFOLIO_FIXTURE,
   POSITIONS_FIXTURE,
   SILENT_TRADES_FIXTURE,
@@ -141,6 +142,13 @@ export const bktHandlers = [
 
   http.post(`${BKT}/executions`, () =>
     HttpResponse.json(EXECUTION_FILLED_FIXTURE, { status: 201 }),
+  ),
+
+  // The user's own exit (APP-114, §17). The default is a fill; NO_FILL, the
+  // 200 replay and the 404/409/503 refusals are per-test overrides for the
+  // same reason as above — each is a different assertion, not a variation.
+  http.post(`${BKT}/executions/exits`, () =>
+    HttpResponse.json(EXIT_FILLED_FIXTURE, { status: 201 }),
   ),
 ]
 

@@ -28,6 +28,24 @@ export interface BktExecutionRequest {
   idempotency_key?: string
 }
 
+/**
+ * `POST /api/v1/executions/exits` body — **the whole body** (contracts §17).
+ *
+ * `extra: forbid` on bkt's `ExitRequest`, so this interface is closed on
+ * purpose: an `exit_price`, an `exit_reason`, a quantity or a side here is a
+ * 422, not a field the service ignores. Everything about the exit except
+ * *which* trade and *which* operation is measured or assigned server-side —
+ * the price from the current mnd quote through the exit fill model, the reason
+ * fixed to `USER_CLOSE`, the timestamps from event time.
+ *
+ * `idempotency_key` is required here, unlike on the entry path.
+ */
+export interface BktExitRequest {
+  silent_trade_id: string
+  /** 1..128 characters. */
+  idempotency_key: string
+}
+
 export type BktExecutionStatus = 'FILLED' | 'NO_FILL' | 'REJECTED'
 export type BktExecutionAction = 'ENTRY' | 'EXIT'
 
@@ -65,6 +83,8 @@ export interface BktExecutionOutcome {
   fill?: BktFillRef | null
   /** e.g. `SPIKE_NO_FILL`, `ENTRY_PRICE_ABOVE_BAND`. */
   reason_code?: string | null
+  /** EXIT rows only — `USER_CLOSE` for a hand close. NULL on every ENTRY. */
+  exit_reason?: string | null
   fill_model?: string
   fill_model_config?: Record<string, unknown>
   determinism_hash?: string
@@ -76,7 +96,15 @@ export interface BktExecutionOutcome {
   platform_error?: string | null
   executed_at?: string | null
   business_now?: string | null
-  /** True when this response is a replay of a recorded outcome for the same
-   *  idempotency key — the retry path, not a second execution (D6). */
+  /**
+   * True when this response is a replay of a recorded outcome for the same
+   * idempotency key — the retry path, not a second execution (D6).
+   *
+   * **Trust the HTTP status, not this flag, on the exits route.** bkt builds
+   * that response with `outcome_from_record(record)`, whose `replayed`
+   * parameter defaults to `false`; the 200-vs-201 code is what actually
+   * distinguishes a replay there (`create_exit` sets it from
+   * `UserExitResult.replayed`).
+   */
   replayed?: boolean
 }

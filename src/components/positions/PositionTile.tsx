@@ -22,7 +22,7 @@ import { StudyIcon } from '@/components/shared/StudyIcon'
 import { StudyTip } from '@/components/shared/StudyTip'
 import { MINI_CHART_HEIGHT, PositionMiniChart } from '@/components/charts/PositionMiniChart'
 import { optionPremiumHistory, underlyingHistory } from '@/lib/optionHistory'
-import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
+import { ManualCloseTicket, isManualCloseAvailable } from '@/components/positions/ManualCloseTicket'
 import { planTitle } from '@/lib/planIntent'
 import { PositionFieldSettings } from '@/components/positions/PositionFieldSettings'
 import { PositionPlanSheet } from '@/components/positions/PositionPlanSheet'
@@ -381,7 +381,16 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
         <button
           type="button"
           aria-label={`Close ${position.symbol} position`}
-          className="group grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96]"
+          // A live position the platform service never linked to a silent trade
+          // has no id bkt's exit route can take (§17). The control stays visible
+          // and inert rather than disappearing.
+          disabled={!isManualCloseAvailable(position)}
+          title={
+            isManualCloseAvailable(position)
+              ? undefined
+              : 'This position is not linked to a silent trade, so the execution service cannot close it.'
+          }
+          className="group grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96] disabled:opacity-40"
           onClick={(event) => {
             event.stopPropagation()
             setManualCloseOpen(true)
