@@ -15,6 +15,7 @@
  */
 import type {
   PltActivity,
+  PltConfigEntry,
   PltPortfolio,
   PltPosition,
   PltSilentTrade,
@@ -513,6 +514,51 @@ export const EXIT_NO_FILL_FIXTURE: BktExecutionOutcome = {
   reason_code: 'SPIKE_NO_FILL',
   reported_to_platform: false,
   executed_at: '2026-08-31T16:21:30Z',
+}
+
+/**
+ * `GET /api/v1/config` — an **array** of entries (AI-021, contracts §16).
+ *
+ * Deliberately mixed: one non-policy key alongside the three typed ones, so a
+ * reader that assumes the list is only policy keys, or that it is a map, fails
+ * here rather than in a browser.
+ */
+export const CONFIG_ENTRIES_FIXTURE: PltConfigEntry[] = [
+  {
+    key: 'policy.max_portfolio_allocation_pct',
+    value: 20,
+    value_type: 'number',
+    description: 'PolicyGate allocation cap',
+    updated_at: '2026-08-20T09:00:00Z',
+  },
+  {
+    key: 'policy.ai_trading_enabled',
+    value: true,
+    value_type: 'boolean',
+    updated_at: '2026-08-31T09:30:00Z',
+  },
+  {
+    key: 'policy.execution_approval_mode',
+    value: 'approve_each',
+    value_type: 'string',
+    updated_at: '2026-08-31T09:31:00Z',
+  },
+  {
+    key: 'policy.trading_window',
+    value: 'rth',
+    value_type: 'string',
+    updated_at: '2026-08-31T09:32:00Z',
+  },
+]
+
+/** plt's refusal of a malformed policy value: 422, one code, and the key. */
+export const CONFIG_VALUE_INVALID_PROBLEM = {
+  type: 'https://stratfolio.local/problems/config-value-invalid',
+  title: 'Configuration value rejected',
+  status: 422,
+  detail: 'policy.trading_window must be "extended" or "rth"',
+  rejection_reasons: ['CONFIG_VALUE_INVALID'],
+  config_key: 'policy.trading_window',
 }
 
 /** bkt's own 422, distinct from plt's: the plan reached bkt and was refused. */

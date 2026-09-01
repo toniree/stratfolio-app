@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw'
 import {
   ACTIVITY_FIXTURE,
+  CONFIG_ENTRIES_FIXTURE,
   EXECUTION_FILLED_FIXTURE,
   EXIT_FILLED_FIXTURE,
   PORTFOLIO_FIXTURE,
@@ -91,6 +92,14 @@ export const pltHandlers = [
   http.get(`${PLT}/activity`, ({ request }) => {
     const limit = Number(new URL(request.url).searchParams.get('limit') ?? 100)
     return HttpResponse.json(ACTIVITY_FIXTURE.slice(0, limit))
+  }),
+
+  // AI-021: an ARRAY of entries, and it includes a non-policy key.
+  http.get(`${PLT}/config`, () => HttpResponse.json(CONFIG_ENTRIES_FIXTURE)),
+
+  http.put(`${PLT}/config/:key`, async ({ params, request }) => {
+    const body = (await request.json()) as { value?: unknown }
+    return HttpResponse.json({ key: String(params.key), value: body.value })
   }),
 
   http.get(`${PLT}/watchlist`, () => HttpResponse.json(WATCHLIST_FIXTURE)),

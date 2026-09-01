@@ -278,3 +278,31 @@ export interface PltThesis {
 /** plt caps every list endpoint at `limit=500` with no cursor (HKP-PLT-8).
  *  An out-of-range value is a 400, not a clamp — so the app sends the cap. */
 export const PLT_LIST_LIMIT_MAX = 500
+
+/**
+ * `GET /api/v1/config` → **an array** of `ConfigEntryResponse`, not a map.
+ *
+ * A frequent wrong assumption, and one the compiler cannot catch against
+ * `Record<string, unknown>`: `ConfigController.all()` returns
+ * `List<ConfigEntryResponse>`, so the caller indexes by scanning `key`.
+ *
+ * `value` is arbitrary JSON (`JsonNode` over a JSONB column), which is why the
+ * three execution-policy keys of contracts §16 are the only ones with typed
+ * semantics and write-time validation.
+ */
+export interface PltConfigEntry {
+  key: string
+  value: unknown
+  /** plt's own note about the stored JSON's shape; advisory only. */
+  value_type?: string
+  description?: string
+  updated_at?: string
+}
+
+/** `PUT /api/v1/config/{key}` body. The value is arbitrary JSON, and for the
+ *  three policy keys a malformed one is a **422** carrying
+ *  `rejection_reasons: ["CONFIG_VALUE_INVALID"]` and the `config_key`. */
+export interface PltUpdateConfig {
+  value: unknown
+  description?: string
+}

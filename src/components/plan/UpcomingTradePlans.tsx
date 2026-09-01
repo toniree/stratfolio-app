@@ -25,7 +25,7 @@ import { planExitSummary, planIntent, planTitle, watchedPlanOptions } from '@/li
 import { PlanCriteriaList } from '@/components/plan/PlanCriteriaList'
 import { Modal } from '@/components/ui/Modal'
 import { usePlanExecutionStore } from '@/store/planExecutionStore'
-import { useUiStore } from '@/store/uiStore'
+import { useAiTradingSwitch } from '@/hooks/policyQueries'
 import { PlanStopwatchIcon } from '@/components/plan/PlanStopwatchIcon'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 
@@ -44,7 +44,10 @@ export function UpcomingTradePlans({
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showAllPlans, setShowAllPlans] = useState(false)
-  const aiTradingEnabled = useUiStore((state) => state.aiTradingEnabled)
+  // In live mode this is plt's `policy.ai_trading_enabled`, not a browser
+  // preference: the same switch the execution service reads before it will
+  // accept an entry at all (§16/§17).
+  const aiTradingEnabled = useAiTradingSwitch().enabled
   const [executionId, setExecutionId] = useState<string | null>(null)
   const disabledIds = usePlanExecutionStore((state) => state.disabledIds)
   const disablePlan = usePlanExecutionStore((state) => state.disablePlan)

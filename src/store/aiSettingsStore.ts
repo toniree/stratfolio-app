@@ -1,19 +1,33 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type ApprovalMode = 'approve' | 'auto'
-export type TradingWindow = 'rth' | 'extended'
+import type { ExecutionApprovalMode, TradingWindow as PolicyTradingWindow } from '@/api/types'
+
+/** The app's spelling of plt's `policy.execution_approval_mode` (`approve` is
+ *  `approve_each` on the wire). One definition, shared with the live seam. */
+export type ApprovalMode = ExecutionApprovalMode
+export type TradingWindow = PolicyTradingWindow
 
 /**
  * AI behaviour preferences.
  *
- * Every field here is **device-local and unenforced** (HKP-AI-8). Nothing
- * server-side checks approval mode, the trading window or the day-loss
- * breaker, and `POST /api/v1/decision-cycles/run` proceeds straight to a plt
- * plan and a bkt execution regardless. `maxAllocationPct` is a second,
- * unenforced copy of a cap PolicyGate already enforces server-side
- * (`policy.max_portfolio_allocation_pct`) — it should be wired to that key or
- * dropped, not duplicated.
+ * **Two classes of field live here now, and they are not the same thing.**
+ *
+ * `approvalMode` and `tradingWindow` became server-enforced in AI-021
+ * (contracts §16): plt's `user_config` is the system of record and service-ai
+ * halts the decision cycle on them. In live mode this store is not consulted
+ * for either — the settings screen reads and writes plt directly. They stay
+ * here for mock mode, which has no server to enforce anything.
+ *
+ * The rest are genuinely device-local, and every row in the UI says so:
+ *  - `riskAppetite` — no backend key exists.
+ *  - `maxAllocationPct` — PolicyGate already enforces its own
+ *    `policy.max_portfolio_allocation_pct`, and this is deliberately NOT wired
+ *    to it: a per-position ceiling and a portfolio allocation cap are not the
+ *    same quantity, and writing one into the other would silently re-scale a
+ *    cap that governs real execution.
+ *  - `circuitBreakerPct` — explicitly deferred backend-side (§16.3): nothing
+ *    measures day P&L server-side and no config key is reserved for it.
  */
 export interface AiSettingsState {
   /** 0 = lowest risk / reward, 100 = highest. Drives the agent's structure choice. */

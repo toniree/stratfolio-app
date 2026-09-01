@@ -467,6 +467,46 @@ export interface Order {
  */
 export type ActivityKind = 'order' | 'ai-signal' | 'thesis-update' | 'alert' | 'other'
 
+/* ---------------------------------------------------------------------------
+ * Server-enforced execution policy (AI-021 — contracts §16).
+ *
+ * These three settings used to live in browser localStorage, where nothing
+ * checked them: a client-side kill switch is not a kill switch. plt's
+ * `user_config` is now the system of record and the enforcement is server-side
+ * — service-ai halts the decision cycle, and bkt's entry gate refuses
+ * `POST /executions` outright when AI trading is off.
+ *
+ * The app's domain words differ from the wire's by exactly one value:
+ * `approve` ⇄ `approve_each`. Mapped in one place, `adapters/executionPolicy`.
+ * ------------------------------------------------------------------------ */
+
+/** `approve`: every validated plan stops and waits for an explicit approval. */
+export type ExecutionApprovalMode = 'approve' | 'auto'
+
+/** `rth`: execution only while the market data service reports the regular
+ *  session; `extended` places no session restriction. */
+export type TradingWindow = 'rth' | 'extended'
+
+export interface ExecutionPolicy {
+  /** Master switch for ALL AI-initiated execution. */
+  aiTradingEnabled: boolean
+  approvalMode: ExecutionApprovalMode
+  tradingWindow: TradingWindow
+  /**
+   * Keys plt holds no row for. The backend default applies — and the defaults
+   * preserve pre-AI-021 behaviour exactly (enabled, auto, extended), so an
+   * unset key is not "off", it is "as it always was".
+   */
+  unsetKeys: string[]
+  /**
+   * Keys whose stored value could not be parsed. Resolved **fail-closed**,
+   * mirroring plt's own `ExecutionPolicyConfig.resolve`: disabled /
+   * approve_each / rth, never silently to the permissive default. Reachable
+   * only by writing the table directly, since the PUT path validates.
+   */
+  invalidKeys: string[]
+}
+
 export interface ActivityEvent {
   id: string
   kind: ActivityKind

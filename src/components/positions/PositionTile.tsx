@@ -16,7 +16,7 @@ import {
   OptionContractChips,
 } from '@/components/positions/OptionContractDetails'
 import { usePrice } from '@/store/priceStore'
-import { useUiStore } from '@/store/uiStore'
+import { useAiTradingSwitch } from '@/hooks/policyQueries'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { StudyIcon } from '@/components/shared/StudyIcon'
 import { StudyTip } from '@/components/shared/StudyTip'
@@ -54,7 +54,8 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const storedFields = usePositionTilePreferences((state) => state.fields)
   const quoteType = usePositionTilePreferences((state) => state.quoteType)
-  const aiTradingEnabled = useUiStore((state) => state.aiTradingEnabled)
+  // Live mode reads the server-enforced switch (§16), not this browser's.
+  const aiTradingEnabled = useAiTradingSwitch().enabled
   const { data: plannerIdeas } = usePlannerIdeas()
   const { position, price, marketValue, totalReturn, totalReturnPct } = valuation
   // Never read `dayChange`/`dayChangePct` straight: a server-marked contract

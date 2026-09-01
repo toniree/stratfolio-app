@@ -2,6 +2,7 @@ import type {
   ActiveUniverseApi,
   AssistantApi,
   AuthApi,
+  ExecutionPolicyApi,
   IdeasApi,
   NewsApi,
   PlannerApi,
@@ -18,6 +19,7 @@ import { httpPortfolioApi } from '@/api/http/HttpPortfolioApi'
 import { httpIdeasApi } from '@/api/http/HttpIdeasApi'
 import { httpPlannerApi } from '@/api/http/HttpPlannerApi'
 import { httpActiveUniverseApi } from '@/api/http/HttpActiveUniverseApi'
+import { httpExecutionPolicyApi } from '@/api/http/HttpExecutionPolicyApi'
 import { httpMarketDataApi } from '@/api/http/HttpMarketDataApi'
 import { marketDataSimulator } from '@/api/marketData/MarketDataSimulator'
 import { PollingQuoteProvider } from '@/api/marketData/PollingQuoteProvider'
@@ -78,6 +80,19 @@ export const ideasApi: IdeasApi = isLive('ideas') ? httpIdeasApi : mockIdeasApi
  * all (HKP-PLT-4) and are recorded locally plus as a schema-valid activity row.
  */
 export const plannerApi: PlannerApi = isLive('planner') ? httpPlannerApi : mockPlannerApi
+
+/**
+ * The execution policy plt enforces (APP-114, contracts §16).
+ *
+ * `null` in mock mode, like `marketDataApi`: these three settings are the ones
+ * whose whole point is that a *server* checks them. A mock implementation
+ * would be a client-side kill switch again, and the settings UI would have no
+ * way to tell the user which of the two it was looking at. Mock mode keeps its
+ * device-local toggles and labels them as such.
+ */
+export const executionPolicyApi: ExecutionPolicyApi | null = isLive('portfolio')
+  ? httpExecutionPolicyApi
+  : null
 
 // Blocked on backend capability, or on a later wave — see `.env.example` and
 // `../stratfolio/docs/plans/APP_HOOKUP_BACKEND_GAPS_V1.md`.

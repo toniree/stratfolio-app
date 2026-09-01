@@ -1,6 +1,8 @@
 import type {
   ActiveUniverse,
   ActivityEvent,
+  ExecutionApprovalMode,
+  ExecutionPolicy,
   ExitRequest,
   Order,
   OrderRequest,
@@ -11,6 +13,7 @@ import type {
   PortfolioOutlook,
   Position,
   ThesisView,
+  TradingWindow,
   UniverseEntry,
 } from '@/api/types'
 import type {
@@ -124,6 +127,22 @@ export interface ActiveUniverseApi {
   restoreSymbol(symbol: string): Promise<UniverseEntry>
   /** Soft-exclude. plt never deletes an entry; it records who excluded it. */
   excludeSymbol(symbol: string, reason?: string): Promise<UniverseEntry>
+}
+
+/**
+ * The execution policy plt enforces — AI-021 / contracts §16.
+ *
+ * Its own seam, and a live-only one: there is no mock implementation, exactly
+ * as there is none for market data. A simulated "server-enforced" policy would
+ * be the same client-side kill switch this replaces, wearing a live-looking
+ * interface. `executionPolicyApi` is `null` in mock mode and the settings UI
+ * branches on that, keeping its device-local behaviour and saying so.
+ */
+export interface ExecutionPolicyApi {
+  getPolicy(): Promise<ExecutionPolicy>
+  setAiTradingEnabled(enabled: boolean): Promise<void>
+  setApprovalMode(mode: ExecutionApprovalMode): Promise<void>
+  setTradingWindow(window: TradingWindow): Promise<void>
 }
 
 export interface AddUniverseSymbolInput {
