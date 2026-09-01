@@ -131,6 +131,7 @@ export function PortfolioPage() {
           marketValue={totals.marketValue}
           dayPl={totals.dayPl}
           dayPlPct={totals.dayPlPct}
+          dayPlAvailable={totals.dayPlAvailable}
           spark={heroSpark}
           expanded={chartOpen}
           onToggle={() => setChartOpen((v) => !v)}

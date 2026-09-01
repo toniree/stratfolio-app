@@ -157,8 +157,13 @@ export function PlannerIdeaDetailsPage() {
             <div className="num mt-1 text-[28px] leading-none font-extrabold tracking-[-0.03em] text-ink">
               {formatMoney(price)}
             </div>
-            <div className={`num mt-1.5 text-[13px] font-bold ${up ? 'text-up' : 'text-down'}`}>
-              {formatSignedPercent(snap?.dayChangePct ?? 0)}{' '}
+            <div
+              className={`num mt-1.5 text-[13px] font-bold ${
+                snap === undefined ? 'text-ink-muted' : up ? 'text-up' : 'text-down'
+              }`}
+            >
+              {/* No quote for this symbol means no day change — not a flat one. */}
+              {snap === undefined ? '—' : formatSignedPercent(snap.dayChangePct)}{' '}
               <span className="font-medium text-ink-muted">today</span>
             </div>
           </div>

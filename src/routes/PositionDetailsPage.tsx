@@ -8,6 +8,7 @@ import { usePrices } from '@/store/priceStore'
 import { usePositions } from '@/hooks/queries'
 import { computeTotals } from '@/lib/portfolioMath'
 import { useOptionMarks } from '@/hooks/marketQueries'
+import { dayChangeOf } from '@/lib/dayChange'
 import {
   formatMoney,
   formatQty,
@@ -116,10 +117,11 @@ export function PositionDetailsPage() {
     )
   }
 
-  const { position, price, dayChange, dayChangePct, marketValue, totalReturn, totalReturnPct } =
-    valuation
+  const { position, price, marketValue, totalReturn, totalReturnPct } = valuation
   const ai = position.ai
-  const up = dayChangePct >= 0
+  // A server-marked contract has no prior mark; today's move is unknown, and
+  // the hint says so rather than printing "+$0.00 (+0.00%) today".
+  const day = dayChangeOf(valuation)
 
   return (
     <div className="space-y-4 pb-4">
@@ -202,8 +204,8 @@ export function PositionDetailsPage() {
           <DetailStat
             label={position.option ? 'Mark' : 'Price'}
             value={formatMoney(price)}
-            hint={`${formatSignedMoney(dayChange)} (${formatSignedPercent(dayChangePct)}) today`}
-            tone={up ? 'up' : 'down'}
+            hint={day.available ? `${day.combined} today` : 'Today’s change unavailable'}
+            tone={day.tone}
           />
           <DetailStat label="Value" value={formatMoney(marketValue)} />
           <DetailStat label="Qty" value={formatQty(position.quantity)} />

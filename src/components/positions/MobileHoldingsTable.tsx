@@ -10,6 +10,7 @@ import {
   formatSignedPercent,
 } from '@/lib/format'
 import type { PositionValuation } from '@/lib/portfolioMath'
+import { dayChangeOf, dayChangeSortKey } from '@/lib/dayChange'
 import type { PerformancePeriod, PerformanceSeries } from '@/api/types'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
@@ -56,6 +57,7 @@ export function MobilePositionsSummary({
   totalPlPct,
   dayPl,
   dayPlPct,
+  dayPlAvailable = true,
   cash,
   performance,
   period = 'ALL',
@@ -66,6 +68,9 @@ export function MobilePositionsSummary({
   totalPlPct: number
   dayPl: number
   dayPlPct: number
+  /** False when a holding in this set has no prior mark, making the sum
+   *  partial. A partial day P&L printed as a whole one is a lie of omission. */
+  dayPlAvailable?: boolean
   cash: number
   performance?: PerformanceSeries
   period?: PerformancePeriod
@@ -143,8 +148,12 @@ export function MobilePositionsSummary({
         />
         <SummaryRow
           label="P/L Day"
-          value={`${formatSignedMoney(dayPl)}  ${formatSignedPercent(dayPlPct)}`}
-          tone={dayPl >= 0 ? 'up' : 'down'}
+          value={
+            dayPlAvailable
+              ? `${formatSignedMoney(dayPl)}  ${formatSignedPercent(dayPlPct)}`
+              : '—'
+          }
+          tone={dayPlAvailable ? (dayPl >= 0 ? 'up' : 'down') : undefined}
         />
       </dl>
     </section>
@@ -431,8 +440,8 @@ function MetricCell({
   valuation: PositionValuation
   className?: string
 }) {
-  const { position, marketValue, price, totalReturn, totalReturnPct, dayChangePct, costBasis } =
-    valuation
+  const { position, marketValue, price, totalReturn, totalReturnPct, costBasis } = valuation
+  const day = dayChangeOf(valuation)
   let value: string
   let detail: string | undefined
   let tone: 'up' | 'down' | undefined
@@ -466,8 +475,10 @@ function MetricCell({
       break
     }
     case 'dayPct':
-      value = formatSignedPercent(dayChangePct)
-      tone = dayChangePct >= 0 ? 'up' : 'down'
+      // "—" when the contract has no prior mark: a 0.00% here would claim the
+      // position is flat today rather than admit today is unmeasurable.
+      value = day.percent
+      tone = day.tone
       break
     case 'openPct':
       value = formatSignedPercent(totalReturnPct)
@@ -504,7 +515,9 @@ function compareMetric(a: PositionValuation, b: PositionValuation, metric: Posit
     pl: (item) => item.totalReturn,
     cost: (item) => item.costBasis,
     orderDate: (item) => new Date(item.position.openedAt).getTime(),
-    dayPct: (item) => item.dayChangePct,
+    // Unmeasured holdings sort to the bottom rather than in among the flat
+    // ones, which is what a 0 would do.
+    dayPct: dayChangeSortKey,
     openPct: (item) => item.totalReturnPct,
   }
   return values[metric](b) - values[metric](a)

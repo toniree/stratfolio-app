@@ -4,6 +4,7 @@ import { AlertTriangle, Info, PieChart, Wallet, Target, TrendingUp } from 'lucid
 import { cn } from '@/lib/cn'
 import { formatMoney, formatSignedMoney, formatSignedPercent } from '@/lib/format'
 import type { PortfolioTotals } from '@/lib/portfolioMath'
+import { dayPlTotal } from '@/lib/dayChange'
 import type { PortfolioMeta } from '@/api/types'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -60,9 +61,11 @@ export function MetricWidgets({
       <Widget
         icon={Wallet}
         label="Day P/L"
-        value={formatSignedMoney(totals.dayPl)}
-        secondary={formatSignedPercent(totals.dayPlPct)}
-        tone={totals.dayPl >= 0 ? 'up' : 'down'}
+        // Withheld when any holding has no prior mark: the sum would be
+        // partial, and a partial total reads as a complete one.
+        value={dayPlTotal(totals).money}
+        secondary={dayPlTotal(totals).percent}
+        tone={dayPlTotal(totals).tone}
         spark={trend}
       />
       <Widget

@@ -155,8 +155,10 @@ function ToastCard({
   onMute: () => void
 }) {
   const snap = usePrice(symbol)
-  const pct = snap?.dayChangePct ?? 0
-  const up = pct >= 0
+  // No quote for this ticker means no day move to report; a 0.00% here would
+  // be a claim about a symbol we never priced.
+  const pct = snap?.dayChangePct
+  const up = (pct ?? 0) >= 0
 
   return (
     <div className="glass-toast mobile-news-toast relative min-h-[108px] rounded-[22px]">
@@ -187,9 +189,12 @@ function ToastCard({
               filled={false}
             />
             <span
-              className={cn('num text-[10.5px] font-bold', up ? 'text-up' : 'text-down')}
+              className={cn(
+                'num text-[10.5px] font-bold',
+                pct === undefined ? 'text-ink-muted' : up ? 'text-up' : 'text-down',
+              )}
             >
-              {up ? '+' : '−'}{Math.abs(pct).toFixed(2)}%
+              {pct === undefined ? '—' : `${up ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`}
             </span>
           </div>
         ) : null}

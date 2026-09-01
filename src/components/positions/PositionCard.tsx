@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatQty, formatSignedMoney, formatSignedPercent } from '@/lib/format'
 import type { PositionValuation } from '@/lib/portfolioMath'
+import { dayChangeOf } from '@/lib/dayChange'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
 import { TradeRecommendation } from '@/components/intelligence/TradeRecommendation'
@@ -20,12 +21,15 @@ export function PositionCard({ valuation }: { valuation: PositionValuation }) {
   const [thesisOpen, setThesisOpen] = useState(false)
   const [tradeOpen, setTradeOpen] = useState(false)
   const [fullThesisOpen, setFullThesisOpen] = useState(false)
-  const { position, price, dayChange, dayChangePct, marketValue, totalReturn, totalReturnPct } =
-    valuation
+  const { position, price, marketValue, totalReturn, totalReturnPct } = valuation
+  // "—" rather than "+$0.00 (+0.00%)" when there is no prior mark to measure
+  // today's move against.
+  const day = dayChangeOf(valuation)
   const underlying = usePrice(position.symbol)
   const ai = position.ai
 
-  const up = dayChangePct >= 0
+  // Open P/L still has a real direction when today's change does not.
+  const up = day.available ? day.tone === 'up' : totalReturn >= 0
 
   return (
     <article className="card overflow-hidden rounded-[22px] transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-white/[0.14] hover:shadow-[0_18px_46px_-24px_rgba(0,0,0,0.85),0_12px_28px_-24px_rgba(47,123,255,0.44)]">
@@ -69,12 +73,18 @@ export function PositionCard({ valuation }: { valuation: PositionValuation }) {
                 {formatMoney(price)}
               </div>
               <div
+                title={day.title}
+                aria-label={day.accessible}
                 className={cn(
                   'num mt-1 text-[12.5px] font-bold',
-                  up ? 'text-up' : 'text-down',
+                  day.tone === 'up'
+                    ? 'text-up'
+                    : day.tone === 'down'
+                      ? 'text-down'
+                      : 'text-ink-muted',
                 )}
               >
-                {formatSignedMoney(dayChange)} ({formatSignedPercent(dayChangePct)})
+                {day.combined}
               </div>
             </div>
           </div>

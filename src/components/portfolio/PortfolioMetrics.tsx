@@ -2,6 +2,7 @@ import { AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatSignedMoney, formatSignedPercent } from '@/lib/format'
 import type { PortfolioTotals } from '@/lib/portfolioMath'
+import { dayPlTotal } from '@/lib/dayChange'
 import type { PortfolioMeta } from '@/api/types'
 import { Skeleton } from '@/components/ui/Skeleton'
 
@@ -30,9 +31,13 @@ export function PortfolioMetrics({ totals, meta, loading }: PortfolioMetricsProp
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Metric
         label="Day P/L"
-        value={formatSignedMoney(totals.dayPl)}
-        hint={`${formatSignedPercent(totals.dayPlPct)} across ${totals.valuations.length} holdings`}
-        tone={totals.dayPl >= 0 ? 'up' : 'down'}
+        value={dayPlTotal(totals).money}
+        hint={
+          dayPlTotal(totals).available
+            ? `${dayPlTotal(totals).percent} across ${totals.valuations.length} holdings`
+            : 'No prior mark for every holding'
+        }
+        tone={dayPlTotal(totals).tone}
       />
       <Metric
         label="Total return"

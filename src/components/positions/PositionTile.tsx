@@ -40,6 +40,7 @@ import {
 } from '@/store/positionTilePreferences'
 import { usePlannerIdeas } from '@/hooks/queries'
 import { useOptionMarks } from '@/hooks/marketQueries'
+import { dayChangeOf, dayPlOf } from '@/lib/dayChange'
 import { optionMarkKey } from '@/api/http/adapters/market'
 import type { PlannerIdea } from '@/api/newsTypes'
 
@@ -54,8 +55,10 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
   const quoteType = usePositionTilePreferences((state) => state.quoteType)
   const aiTradingEnabled = useUiStore((state) => state.aiTradingEnabled)
   const { data: plannerIdeas } = usePlannerIdeas()
-  const { position, price, dayChangePct, dayChange, marketValue, totalReturn, totalReturnPct } =
-    valuation
+  const { position, price, marketValue, totalReturn, totalReturnPct } = valuation
+  // Never read `dayChange`/`dayChangePct` straight: a server-marked contract
+  // has no prior mark, and its 0 must render as "—", not as "unchanged".
+  const day = dayChangeOf(valuation)
   const underlying = usePrice(position.symbol)
   // Real chain values for the stats panel below. The query key matches the
   // page-level `useOptionMarks`, so TanStack serves this from the same
@@ -71,7 +74,9 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
         })
       ]
     : undefined
-  const up = dayChangePct >= 0
+  // The sparkline still needs a direction; open P/L is a real number even when
+  // today's change is unknown.
+  const up = day.available ? day.tone === 'up' : totalReturn >= 0
   const to = `/app/positions/${position.id}`
   const userNote = position.userNote?.trim()
   const ai = position.ai
@@ -166,8 +171,15 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
               <span className="hidden lg:inline">{formatMoney(price)}</span>
             </div>
           </div>
-          <div className={cn('num mt-0.5 text-[11.5px] font-bold lg:mt-1', up ? 'text-up' : 'text-down')}>
-            {formatSignedMoney(dayChange)} ({formatSignedPercent(dayChangePct)})
+          <div
+            title={day.title}
+            aria-label={day.accessible}
+            className={cn(
+              'num mt-0.5 text-[11.5px] font-bold lg:mt-1',
+              day.tone === 'up' ? 'text-up' : day.tone === 'down' ? 'text-down' : 'text-ink-muted',
+            )}
+          >
+            {day.combined}
           </div>
         </div>
       </div>
@@ -541,7 +553,8 @@ function MobilePositionField({
   /** The leading column has no left padding to bleed the header strip into. */
   first?: boolean
 }) {
-  const { position, marketValue, costBasis, totalReturn, totalReturnPct, dayPl, price } = valuation
+  const { position, marketValue, costBasis, totalReturn, totalReturnPct, price } = valuation
+  const day = dayPlOf(valuation)
   const quoteType = usePositionTilePreferences((state) => state.quoteType)
   const openingSign = optionOpeningSign(position)
   const displayedQuote = position.option
@@ -587,8 +600,8 @@ function MobilePositionField({
     },
     dayPl: {
       label: 'Day P/L',
-      value: formatSignedMoney(dayPl),
-      tone: dayPl >= 0 ? 'up' : 'down',
+      value: day.money,
+      tone: day.tone,
     },
     avgCost: {
       label: 'Cost',

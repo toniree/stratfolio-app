@@ -15,6 +15,7 @@ export function PortfolioValueWidget({
   marketValue,
   dayPl,
   dayPlPct,
+  dayPlAvailable = true,
   spark,
   expanded,
   onToggle,
@@ -22,10 +23,18 @@ export function PortfolioValueWidget({
   marketValue: number
   dayPl: number
   dayPlPct: number
+  /**
+   * False when a holding in the book has no prior mark. The day figure is then
+   * unknown, not flat, and a "+0.00%" under the portfolio value would be read
+   * as "your book did nothing today" — a claim nobody made.
+   */
+  dayPlAvailable?: boolean
   spark: number[]
   expanded: boolean
   onToggle: () => void
 }) {
+  // The sparkline needs a direction regardless; it draws value history, not
+  // today's move.
   const up = dayPl >= 0
 
   return (
@@ -58,12 +67,13 @@ export function PortfolioValueWidget({
             {formatMoney(marketValue)}
           </div>
           <div
+            title={dayPlAvailable ? undefined : 'No prior mark for every holding, so today’s change cannot be measured.'}
             className={cn(
               'num mt-1.5 truncate text-[11.5px] font-semibold',
-              up ? 'text-up' : 'text-down',
+              !dayPlAvailable ? 'text-ink-muted' : up ? 'text-up' : 'text-down',
             )}
           >
-            {formatSignedPercent(dayPlPct)}
+            {dayPlAvailable ? formatSignedPercent(dayPlPct) : '—'}
             <span className="hidden font-medium text-ink-muted sm:inline"> today</span>
           </div>
         </div>
