@@ -1,7 +1,6 @@
 import type {
   ActiveUniverse,
   ActivityEvent,
-  Idea,
   Order,
   OrderRequest,
   PerformancePeriod,
@@ -10,6 +9,7 @@ import type {
   PortfolioMeta,
   PortfolioOutlook,
   Position,
+  ThesisView,
   UniverseEntry,
 } from '@/api/types'
 import type {
@@ -44,9 +44,19 @@ export interface PortfolioApi {
   getOrders(): Promise<Order[]>
 }
 
+/**
+ * Theses — plt's `ThesisResponse`, and nothing else (APP-111).
+ *
+ * The seam used to be `getIdeas(): Idea[]`, where `Idea` carried a reference
+ * price, an entry band, a target band, an expected upside and a recommendation.
+ * plt records none of those on a thesis, so a live implementation of that
+ * interface would have had to invent five numbers per row. The seam now speaks
+ * `ThesisView`; the scripted `Idea` rides along on `ThesisView.idea` in mock
+ * mode, and its absence is what tells a component to render the thesis plainly.
+ */
 export interface IdeasApi {
-  getIdeas(): Promise<Idea[]>
-  getIdea(id: string): Promise<Idea | undefined>
+  getTheses(): Promise<ThesisView[]>
+  getThesis(id: string): Promise<ThesisView | undefined>
 }
 
 export interface NewsApi {

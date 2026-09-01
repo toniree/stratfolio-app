@@ -12,7 +12,8 @@ export const queryKeys = {
   outlook: (accountId: string) => ['portfolio-outlook', accountId] as const,
   performance: (accountId: string, period: PerformancePeriod) =>
     ['performance', accountId, period] as const,
-  ideas: ['ideas'] as const,
+  theses: ['theses'] as const,
+  thesis: (id: string) => ['theses', id] as const,
   activity: ['activity'] as const,
   orders: ['orders'] as const,
   news: ['news'] as const,
@@ -54,8 +55,15 @@ export function usePerformance(accountId: string, period: PerformancePeriod) {
   })
 }
 
-export function useIdeas() {
-  return useQuery({ queryKey: queryKeys.ideas, queryFn: () => ideasApi.getIdeas() })
+/**
+ * The thesis feed (APP-111).
+ *
+ * Returns `ThesisView[]` — plt's recorded thesis fields. A row's optional
+ * `idea` is the demo enrichment; components branch on its presence, never on
+ * the data mode.
+ */
+export function useTheses() {
+  return useQuery({ queryKey: queryKeys.theses, queryFn: () => ideasApi.getTheses() })
 }
 
 export function useActivity() {

@@ -18,6 +18,7 @@ import type {
   PltPortfolio,
   PltPosition,
   PltSilentTrade,
+  PltThesis,
   PltTradePlan,
 } from '@/api/http/wire/plt'
 import type { PltWatchlistCapacity, PltWatchlistList } from '@/api/http/wire/watchlist'
@@ -213,6 +214,55 @@ export const TRADE_PLANS_FIXTURE: PltTradePlan[] = [
   TRADE_PLAN_VALIDATED_FIXTURE,
   TRADE_PLAN_LEGACY_FIXTURE,
 ]
+
+/**
+ * A full `ThesisResponse`.
+ *
+ * `confidence` is the 0..1 fraction plt sends and `time_horizon` is an
+ * ISO-8601 duration — both stay in those units through the view model and are
+ * only formatted at render (§7.4). Note what is *not* here and cannot be
+ * invented downstream: no price, no entry band, no target band, no
+ * recommendation, no expected upside.
+ */
+export const THESIS_FIXTURE: PltThesis = {
+  id: '77665544-3322-4110-8fee-ddccbbaa9988',
+  ticker: 'nvda',
+  direction: 'BULLISH',
+  rationale: 'Datacentre backlog covers three quarters of consensus revenue.',
+  evidence: {
+    iv_rank: 41.2,
+    earnings_date: '2026-11-18',
+    analystRevisions: 'net positive',
+    passes_screen: true,
+    peers: ['AMD', 'AVGO'],
+    // Provenance plumbing that the view model surfaces on its own fields.
+    model_version: 'gpt-mock-1',
+  },
+  features: { rsi_14: 61.4 },
+  confidence: 0.72,
+  expected_catalyst: 'Q3 print, 18 November',
+  time_horizon: 'P14D',
+  invalidation_conditions: ['Close below the 50-day', 'Guidance cut at the print'],
+  model_version: 'gpt-mock-1',
+  prompt_version: 'thesis-v3',
+  strategy_version: 'strategy-v2',
+  source: 'AI',
+  decision_episode_id: 'e1e2e3e4-1111-4222-8333-444455556666',
+  created_at: '2026-08-30T16:00:00Z',
+}
+
+/** The sparse case, and the common one: plt omits every nullable field rather
+ *  than sending `null`, so the adapter must leave them `undefined` (§7.2). */
+export const THESIS_SPARSE_FIXTURE: PltThesis = {
+  id: '11112222-3333-4444-8555-666677778888',
+  ticker: 'COIN',
+  direction: 'BEARISH',
+  rationale: 'Volumes are rolling over into a fee-compression cycle.',
+  source: 'USER',
+  created_at: '2026-08-31T08:30:00Z',
+}
+
+export const THESES_FIXTURE: PltThesis[] = [THESIS_SPARSE_FIXTURE, THESIS_FIXTURE]
 
 export const ACTIVITY_FIXTURE: PltActivity[] = [
   {

@@ -231,6 +231,66 @@ export interface Idea {
   provenance?: Provenance
 }
 
+/* ---------------------------------------------------------------------------
+ * Theses — plt `GET /api/v1/theses` (APP-111).
+ * ------------------------------------------------------------------------ */
+
+export type ThesisDirection = 'BULLISH' | 'BEARISH' | 'NEUTRAL'
+
+/** One row of the thesis `evidence` blob, flattened for rendering.
+ *  plt types `evidence` as a free-form `Map<String, Object>`, so the adapter
+ *  cannot promise named fields — it promises the keys the model actually sent. */
+export interface ThesisEvidenceEntry {
+  label: string
+  value: string
+}
+
+/**
+ * A thesis exactly as plt records it — nothing more.
+ *
+ * `ThesisResponse` carries a rationale, a direction, a confidence, an evidence
+ * blob, invalidation conditions, an expected catalyst and a time horizon. It
+ * carries **no price, no entry band, no target band and no recommendation**, so
+ * this view model has none either: the rich `Idea` those screens were built on
+ * is a demo construct and is offered here only as an optional enrichment that
+ * the mock seed can supply and a live backend never can (D4, §6).
+ */
+export interface ThesisView {
+  id: string
+  symbol: string
+  direction: ThesisDirection
+  rationale: string
+  /**
+   * **A 0..1 fraction, exactly as plt sends it** (§7.4). Not a percentage and
+   * not the app's 0–100 conviction domain — formatting happens at render via
+   * `formatConfidence()`. A silent ×100 here is the footgun the plan calls out.
+   */
+  confidence?: number
+  evidence?: ThesisEvidenceEntry[]
+  invalidationConditions?: string[]
+  expectedCatalyst?: string
+  /** `time_horizon` verbatim — an ISO-8601 duration such as `P14D`. Rendered
+   *  through `formatHorizon()`; never rewritten in the adapter. */
+  horizon?: string
+  source: 'ai' | 'user'
+  modelVersion?: string
+  promptVersion?: string
+  strategyVersion?: string
+  /** The decision episode that produced the thesis, when there is one. */
+  episodeId?: string
+  createdAt: string
+  provenance: Provenance
+  /**
+   * Demo-only enrichment: the scripted idea (prices, entry/target bands,
+   * recommendation, charts) behind this thesis.
+   *
+   * Present in mock mode only. Live theses leave it `undefined`, which is what
+   * routes the UI to the plain thesis rendering instead of a tile whose every
+   * number would have to be invented.
+   */
+  idea?: Idea
+}
+
 export type OrderSide = 'BUY' | 'SELL'
 
 export interface OrderRequest {

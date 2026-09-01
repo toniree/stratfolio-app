@@ -15,6 +15,7 @@ import { mockAuthApi } from '@/api/mock/MockAuthApi'
 import { mockAssistantApi } from '@/api/mock/MockAssistantApi'
 import { mockActiveUniverseApi } from '@/api/mock/MockActiveUniverseApi'
 import { httpPortfolioApi } from '@/api/http/HttpPortfolioApi'
+import { httpIdeasApi } from '@/api/http/HttpIdeasApi'
 import { httpActiveUniverseApi } from '@/api/http/HttpActiveUniverseApi'
 import { httpMarketDataApi } from '@/api/http/HttpMarketDataApi'
 import { marketDataSimulator } from '@/api/marketData/MarketDataSimulator'
@@ -60,9 +61,17 @@ export const quoteProvider: QuoteProvider = isLive('market')
 
 export const marketDataApi: MarketDataApi | null = isLive('market') ? httpMarketDataApi : null
 
+/**
+ * Theses — plt `GET /api/v1/theses` (APP-111).
+ *
+ * Read-only in both modes. The seam speaks `ThesisView`; the demo's rich
+ * `Idea` (prices, entry/target bands, recommendation) rides along on
+ * `ThesisView.idea`, which only the mock can populate.
+ */
+export const ideasApi: IdeasApi = isLive('ideas') ? httpIdeasApi : mockIdeasApi
+
 // Blocked on backend capability, or on a later wave — see `.env.example` and
 // `../stratfolio/docs/plans/APP_HOOKUP_BACKEND_GAPS_V1.md`.
-export const ideasApi: IdeasApi = mockIdeasApi // APP-111 (Wave B)
 export const newsApi: NewsApi = mockNewsApi // HKP-MND-2
 export const plannerApi: PlannerApi = mockPlannerApi // APP-113 (Wave B)
 export const authApi: AuthApi = mockAuthApi // HKP-AUTH-1 — V1 has zero auth

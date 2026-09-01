@@ -4,7 +4,7 @@ import { useUiStore } from '@/store/uiStore'
 import { useThesisDecisionStore } from '@/store/thesisDecisionStore'
 import { usePrices, useTrackedSymbols } from '@/store/priceStore'
 import {
-  useIdeas,
+  useTheses,
   useActivity,
   usePerformance,
   usePlannerIdeas,
@@ -31,6 +31,7 @@ import { HoldingsTable } from '@/components/positions/HoldingsTable'
 import { Carousel, CarouselItem } from '@/components/shared/Carousel'
 import { PositionTile } from '@/components/positions/PositionTile'
 import { RecTile } from '@/components/thesis/RecTile'
+import { ThesisCard } from '@/components/thesis/ThesisCard'
 import { UpcomingTradePlans } from '@/components/plan/UpcomingTradePlans'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { formatSignedMoney, formatSignedPercent } from '@/lib/format'
@@ -55,7 +56,7 @@ export function PortfolioPage() {
   const { data: outlook, isLoading: outlookLoading, refetch: refetchOutlook } =
     usePortfolioOutlook(accountId)
   const { data: performance } = usePerformance(accountId, period)
-  const { data: ideas, isLoading: ideasLoading } = useIdeas()
+  const { data: theses, isLoading: thesesLoading } = useTheses()
   const { data: plannerIdeas, isLoading: plannerLoading } = usePlannerIdeas()
   const { data: activity } = useActivity()
   const thesisDecisions = useThesisDecisionStore((s) => s.decisions)
@@ -117,8 +118,8 @@ export function PortfolioPage() {
     totals.valuations.slice().sort((a, b) => b.marketValue - a.marketValue)[0]?.history ?? []
 
   const topRecs = useMemo(
-    () => (ideas ?? []).filter((idea) => !thesisDecisions[idea.id]).slice(0, 10),
-    [ideas, thesisDecisions],
+    () => (theses ?? []).filter((thesis) => !thesisDecisions[thesis.id]).slice(0, 10),
+    [theses, thesisDecisions],
   )
 
   const metricsStrip = (
@@ -273,13 +274,20 @@ export function PortfolioPage() {
                 See all
               </Link>
             </div>
-            {ideasLoading ? (
+            {thesesLoading ? (
               <Skeleton className="h-[268px] rounded-[18px]" />
             ) : (
               <div className="space-y-3">
-                {topRecs.slice(0, 3).map((idea) => (
-                  <RecTile key={idea.id} idea={idea} />
-                ))}
+                {topRecs.slice(0, 3).map((thesis) =>
+                  // Branching on the data, not the mode: a live thesis has no
+                  // entry band, target band or recommendation for RecTile to
+                  // render, so it renders as the thesis plt recorded.
+                  thesis.idea ? (
+                    <RecTile key={thesis.id} idea={thesis.idea} />
+                  ) : (
+                    <ThesisCard key={thesis.id} thesis={thesis} />
+                  ),
+                )}
               </div>
             )}
           </section>
@@ -327,18 +335,22 @@ export function PortfolioPage() {
           titleClassName="text-[10px] font-extrabold tracking-[0.075em] text-ink-soft uppercase sm:text-[10px]"
           subtitle={<ThesisResearchTicker />}
           seeAllTo="/app/thesis"
-          itemCount={ideasLoading ? 3 : topRecs.length}
+          itemCount={thesesLoading ? 3 : topRecs.length}
           empty={<EmptyRow title="No new theses right now" />}
         >
-          {ideasLoading
+          {thesesLoading
             ? Array.from({ length: 3 }).map((_, i) => (
                 <CarouselItem key={i}>
                   <Skeleton className="h-[268px] rounded-[18px]" />
                 </CarouselItem>
               ))
-            : topRecs.map((idea) => (
-                <CarouselItem key={idea.id}>
-                  <RecTile idea={idea} />
+            : topRecs.map((thesis) => (
+                <CarouselItem key={thesis.id}>
+                  {thesis.idea ? (
+                    <RecTile idea={thesis.idea} />
+                  ) : (
+                    <ThesisCard thesis={thesis} />
+                  )}
                 </CarouselItem>
               ))}
         </Carousel>

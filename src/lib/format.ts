@@ -68,3 +68,40 @@ export function upperMonth(label: string): string {
     (month) => month.toUpperCase(),
   )
 }
+
+/**
+ * Render a backend confidence — **a 0..1 fraction** — as a percentage.
+ *
+ * The wire value stays fractional all the way from `ThesisResponse.confidence`
+ * into `ThesisView.confidence`; this is the single place it becomes a
+ * percentage for a human (§7.4). The other legal conversion is
+ * `convictionFromConfidence()` in the wire scalars, which maps the same
+ * fraction into the app's 0–100 conviction domain for `AIAssessment`.
+ */
+export function formatConfidence(fraction: number, digits = 0): string {
+  const clamped = Math.max(0, Math.min(1, fraction))
+  return `${(clamped * 100).toFixed(digits)}%`
+}
+
+/**
+ * Render plt's `time_horizon` / `expected_holding_period`.
+ *
+ * Both are ISO-8601 durations on the wire (`P14D`, `P2W`, `P3M`). Anything
+ * this does not recognise is echoed **verbatim** rather than guessed at: the
+ * field is a free string server-side, and a horizon the app cannot parse is
+ * still a horizon the model wrote.
+ */
+export function formatHorizon(value: string): string {
+  const match = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?$/.exec(value.trim().toUpperCase())
+  if (!match || match.slice(1).every((part) => part === undefined)) return value
+  const units: [string | undefined, string][] = [
+    [match[1], 'year'],
+    [match[2], 'month'],
+    [match[3], 'week'],
+    [match[4], 'day'],
+  ]
+  const parts = units
+    .filter(([amount]) => amount !== undefined)
+    .map(([amount, unit]) => `${amount} ${unit}${Number(amount) === 1 ? '' : 's'}`)
+  return parts.length > 0 ? parts.join(' ') : value
+}

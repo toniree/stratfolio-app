@@ -1,30 +1,31 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Search, X } from 'lucide-react'
-import { useIdeas } from '@/hooks/queries'
+import { useTheses } from '@/hooks/queries'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { IdeaCard } from '@/components/thesis/IdeaCard'
+import { ThesisCard } from '@/components/thesis/ThesisCard'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useThesisDecisionStore } from '@/store/thesisDecisionStore'
 
 /** Discovery feed for trade theses that still need a user decision. */
 export function IdeasPage() {
   const [query, setQuery] = useState('')
-  const { data: ideas, isLoading } = useIdeas()
+  const { data: theses, isLoading } = useTheses()
   const thesisDecisions = useThesisDecisionStore((s) => s.decisions)
 
   const visible = useMemo(() => {
     // Undecided theses only — a rejected one reappearing in search would look
     // like the rejection did not take.
-    const open = (ideas ?? []).filter((idea) => !thesisDecisions[idea.id])
+    const open = (theses ?? []).filter((thesis) => !thesisDecisions[thesis.id])
     const term = query.trim().toUpperCase()
     if (!term) return open
     return open.filter(
-      (idea) =>
-        idea.symbol.toUpperCase().includes(term) ||
-        (idea.company?.toUpperCase().includes(term) ?? false),
+      (thesis) =>
+        thesis.symbol.toUpperCase().includes(term) ||
+        (thesis.idea?.company?.toUpperCase().includes(term) ?? false),
     )
-  }, [ideas, query, thesisDecisions])
+  }, [theses, query, thesisDecisions])
 
   return (
     <div className="space-y-4">
@@ -79,14 +80,17 @@ export function IdeasPage() {
         </div>
       ) : (
         <div className="grid gap-3.5 xl:grid-cols-2">
-          {visible.map((idea, index) => (
+          {visible.map((thesis, index) => (
             <motion.div
-              key={idea.id}
+              key={thesis.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.26, delay: Math.min(index * 0.04, 0.24) }}
             >
-              <IdeaCard idea={idea} />
+              {/* The branch is on the data, not on the data mode: a thesis
+                  carrying a fully-specified demo idea renders the rich card,
+                  and one that does not renders what plt actually recorded. */}
+              {thesis.idea ? <IdeaCard idea={thesis.idea} /> : <ThesisCard thesis={thesis} />}
             </motion.div>
           ))}
         </div>

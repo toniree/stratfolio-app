@@ -1,22 +1,38 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Idea } from '@/api/types'
+import type { Idea, ThesisView } from '@/api/types'
 import { IdeasPage } from '@/routes/IdeasPage'
 import { useThesisDecisionStore } from '@/store/thesisDecisionStore'
 
-const ideas = [
-  { id: 'nvda-thesis', source: 'ai', symbol: 'NVDA', company: 'NVIDIA' },
-  { id: 'tsm-thesis', source: 'user', symbol: 'TSM', company: 'Taiwan Semiconductor' },
-  { id: 'rejected-thesis', source: 'ai', symbol: 'MU', company: 'Micron' },
-] as Idea[]
+/** Two enriched theses (the demo shape) and one live-shaped thesis with no
+ *  `idea` at all — the search must treat both the same. */
+const theses = [
+  {
+    id: 'nvda-thesis',
+    symbol: 'NVDA',
+    source: 'ai',
+    idea: { id: 'nvda-thesis', symbol: 'NVDA', company: 'NVIDIA' },
+  },
+  {
+    id: 'tsm-thesis',
+    symbol: 'TSM',
+    source: 'user',
+    idea: { id: 'tsm-thesis', symbol: 'TSM', company: 'Taiwan Semiconductor' },
+  },
+  { id: 'rejected-thesis', symbol: 'MU', source: 'ai' },
+] as ThesisView[]
 
 vi.mock('@/hooks/queries', () => ({
-  useIdeas: () => ({ data: ideas, isLoading: false }),
+  useTheses: () => ({ data: theses, isLoading: false }),
 }))
 
 vi.mock('@/components/thesis/IdeaCard', () => ({
   IdeaCard: ({ idea }: { idea: Idea }) => <div>{idea.id}</div>,
+}))
+
+vi.mock('@/components/thesis/ThesisCard', () => ({
+  ThesisCard: ({ thesis }: { thesis: ThesisView }) => <div>{thesis.id}</div>,
 }))
 
 describe('IdeasPage thesis search', () => {

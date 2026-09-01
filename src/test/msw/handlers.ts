@@ -4,6 +4,7 @@ import {
   PORTFOLIO_FIXTURE,
   POSITIONS_FIXTURE,
   SILENT_TRADES_FIXTURE,
+  THESES_FIXTURE,
   TRADE_PLANS_FIXTURE,
   WATCHLIST_CAPACITY_FIXTURE,
   WATCHLIST_FIXTURE,
@@ -59,6 +60,28 @@ export const pltHandlers = [
     const status = new URL(request.url).searchParams.get('status')
     const rows = status ? TRADE_PLANS_FIXTURE.filter((p) => p.status === status) : TRADE_PLANS_FIXTURE
     return HttpResponse.json(rows)
+  }),
+
+  http.get(`${PLT}/theses`, ({ request }) => {
+    const params = new URL(request.url).searchParams
+    const ticker = params.get('ticker')
+    const limit = Number(params.get('limit') ?? 50)
+    const rows = ticker
+      ? THESES_FIXTURE.filter((t) => t.ticker.toUpperCase() === ticker.toUpperCase())
+      : THESES_FIXTURE
+    return HttpResponse.json(rows.slice(0, limit))
+  }),
+
+  http.get(`${PLT}/theses/:id`, ({ params }) => {
+    const row = THESES_FIXTURE.find((t) => t.id === params.id)
+    return row
+      ? HttpResponse.json(row)
+      : problem(404, {
+          type: 'https://stratfolio.local/problems/not-found',
+          title: 'Not found',
+          status: 404,
+          detail: `No thesis ${String(params.id)}`,
+        })
   }),
 
   http.get(`${PLT}/activity`, ({ request }) => {
