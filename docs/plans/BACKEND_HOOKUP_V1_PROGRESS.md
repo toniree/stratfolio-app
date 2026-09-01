@@ -263,3 +263,127 @@ Replay admin stats list **`tickers: 3`** for this dataset.
 - **No browser-rendered check** — verification used curl through the Vite dev proxy only; UI rendering of live market data was not exercised.
 - **Picker/company names from seed** per plan §3.8 — not wired to live mnd metadata.
 - **`useLiveBars` interval choices and empty-chain-summary paths unexercised** — not counted as failures.
+
+---
+
+## Wave B (APP-111/112/113) — DONE (verified)
+
+**Date:** 2026-08-31  
+**Branch:** `backend-hookup` @ `44e8a41` (commits `2a3283f` APP-111, `1c430e6` APP-112, `44e8a41` APP-113)  
+**Backend:** `../stratfolio` @ `app-hookup` `e182536` (dev DB with seeded theses/plans/silent-trades)  
+**Agent:** Cursor verification pass (Wave B proof)  
+**Plan:** `docs/plans/BACKEND_HOOKUP_V1_PLAN.md` (§3.1–3.3, §4 Wave B proof)
+
+### Summary
+
+| Check | Result |
+|---|---|
+| 1. `npx tsc -b` | **PASS** (exit 0) |
+| 2. `npx vitest run` | **PASS** — 61 files, **416 tests**, 7.85s |
+| 3. `npm run build` | **PASS** (exit 0; chunk-size warning only) |
+| 4. `npx oxlint src` | **PASS** (exit 0, no errors) |
+| 5. Live smoke — mnd replay + plt + bkt + Vite proxy reads | **PASS** |
+| 6. Write-chain smoke — plan → execution → idempotent replay + policy violations | **PASS** |
+
+**Overall: Wave B verification PASSED** (static suite + live replay smoke + write chain).
+
+---
+
+### Static / suite evidence (2026-08-31, commit `44e8a41`)
+
+#### Typecheck
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npx tsc -b
+# exit 0, no output
+```
+
+#### Vitest
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npx vitest run
+```
+```
+ Test Files  61 passed (61)
+      Tests  416 passed (416)
+   Duration  7.85s
+```
+
+#### Production build
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npm run build
+# exit 0 — dist/assets/index-C7rlKTyg.js built
+```
+
+#### Oxlint
+```bash
+cd /Users/tmoney/dev/stratfolio-app && npx oxlint src
+# exit 0, no errors
+```
+
+---
+
+### Live replay smoke evidence (2026-08-31)
+
+Docker stack brought up (`make up && make wait-db`). mnd built and started E2E-style (`MARKET_MODE=REPLAY`, `MND_REPLAY_AUTOSTART=false`, `MND_STALENESS_THRESHOLD_SECONDS=3600`, `REPLAY_SPEED=120`); replay `synthetic-v1` at speed 120 started via admin API. plt (`make run`) and bkt (`BKT_USE_REAL_PEERS=true`, `BKT_MAX_QUOTE_AGE_SECONDS=2400`, `make run`) reached health.
+
+#### Backend / app startup
+
+| Step | Result |
+|---|---|
+| mnd `:7102/readyz` | **PASS** — `mode=REPLAY`, `replay_dataset=synthetic-v1`, `replay_state=RUNNING`, `staleness_threshold_seconds=3600` |
+| plt `:7201/actuator/health` | **PASS** — `{"status":"UP",...}` |
+| bkt `:7401/health` | **PASS** — `{"status":"UP","service":"service-bkt",...}` |
+| App `.env` (`VITE_DATA_PORTFOLIO=live`, `VITE_DATA_MARKET=live`, `VITE_DATA_IDEAS=live`, `VITE_DATA_PLANNER=live`) + `npm run dev` | **PASS** — Vite ready on `:5173` |
+
+#### Vite proxy reads (`http://localhost:5173/plt/...`)
+
+| Endpoint | HTTP | Notes |
+|---|---|---|
+| `/api/v1/theses?limit=5` | 200 | **5 rows** — live `ThesisView` source (e.g. MSFT BULLISH thesis with fractional `confidence`, `rationale`, `evidence`) |
+| `/api/v1/trade-plans?limit=5` | 200 | **5 rows** — statuses include `EXECUTED`, `VALIDATED`, `REJECTED` (e.g. MSFT EXECUTED, AAPL VALIDATED/REJECTED) |
+| `/api/v1/silent-trades?limit=5` | 200 | **5 rows** — prior seeded trades (MSFT CLOSED, AAPL OPEN, SPY CLOSED, …) |
+
+#### Write-chain smoke (adapter-shaped bodies via proxy)
+
+**(a) Conforming single-leg long CALL plan (AAPL)**
+
+`POST /plt/api/v1/trade-plans` with fresh `Idempotency-Key`, D11-pinned `execution_mode=SILENT`, `risk_profile=HIGH_REWARD_HIGH_RISK`, `side=LONG`, `as_of=2026-06-04` (daily cap on `2026-06-01` already saturated from prior cycles), contract from live chain (`AAPL` CALL strike 170, exp `2026-06-26`, dte 22, entry band from chain mid):
+
+| Field | Value |
+|---|---|
+| HTTP | **201** |
+| `status` | **VALIDATED** |
+| `plan_id` | `01a05ba3-81e2-71b4-b2ae-d6f543923069` |
+| `occ_symbol_expected` | `AAPL260626C00170000` |
+| `capital_allocation` | `2491.0` (under per-trade cap 2500) |
+
+**(b) Execution + idempotent replay**
+
+`POST /bkt/api/v1/executions` `{"trade_plan_id":"01a05ba3-81e2-71b4-b2ae-d6f543923069","idempotency_key":"<same uuid>"}`:
+
+| Attempt | HTTP | `status` | Notes |
+|---|---|---|---|
+| First | **201** | **FILLED** | `fill.price=24.09`, `silent_trade_id=01a05ba3-824c-709d-abef-7479e2fc3b86`, `reported_to_platform=true` |
+| Replay (same body) | **200** | **FILLED** | Idempotent replay of recorded outcome |
+
+**(c) Policy-violating plans**
+
+| Violation | HTTP | `rejection_reasons[]` (verbatim) |
+|---|---|---|
+| `side=SHORT` (long CALL otherwise conforming) | **422** | `["NOT_LONG"]` |
+| `dte=0` with `expiration=as_of` | **422** | `["DTE_LT_1"]` |
+
+#### Cleanup performed
+- Vite dev server stopped
+- mnd, plt, and bkt processes stopped
+- Verification `.env` removed from app repo
+- Docker compose stack **left running** (`make up`)
+
+---
+
+### Known limitations (Wave B proof scope)
+
+- **No browser-rendered check** — verification used curl through the Vite dev proxy only; ticket UI, 422 rendering, and query invalidation were not exercised in a browser.
+- **FILLED vs NO_FILL** — this pass observed **FILLED**; `NO_FILL` depends on replay quote state at execution time (fixture-tested in suite).
+- **Manual close still disabled** — live `submitOrder(close)` remains refused pending BKT-018 wiring (HKP-BKT-1); not a Wave B failure.
+- **AI plan composer deferred to Wave C** — `createIdea` via regex NLP blocked on HKP-AI-3a; live planner reads + schema-valid activity dispositions only (APP-113).
+- **`as_of` daily trade cap** — dev DB from prior AI cycles saturated `2026-06-01`; conforming plan used `as_of=2026-06-04` with matching DTE (PolicyGate truth, not an app defect).
