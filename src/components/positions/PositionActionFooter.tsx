@@ -62,7 +62,9 @@ export function PositionActionFooter({
       kind: 'position',
       id: position.id,
       label: contract,
-      detail: `${position.ai.recommendation} · ${position.ai.conviction}/100 conviction`,
+      detail: position.ai
+        ? `${position.ai.recommendation} · ${position.ai.conviction}/100 conviction`
+        : undefined,
       to: `/app/positions/${position.id}`,
     })
   }

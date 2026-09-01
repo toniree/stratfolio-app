@@ -7,6 +7,7 @@ import type { PositionValuation } from '@/lib/portfolioMath'
 import type { Position } from '@/api/types'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
+import { AIUnavailableChip } from '@/components/intelligence/AIUnavailable'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { Button } from '@/components/ui/Button'
 import { TileShell, TileStat } from '@/components/shared/TileShell'
@@ -57,7 +58,10 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
   const up = dayChangePct >= 0
   const to = `/app/positions/${position.id}`
   const userNote = position.userNote?.trim()
-  const note = userNote || position.ai.recommendationNote
+  const ai = position.ai
+  // No user note and no model note leaves nothing to say — better an empty
+  // notes list than a sentence the model never wrote.
+  const note = userNote || ai?.recommendationNote || ''
   // Notes read as a list of separate observations, so each sentence gets its
   // own bullet rather than the heading carrying a single decorative dot.
   const noteItems = note
@@ -198,24 +202,28 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
                     </EventStepButton>
                   </>
                 ) : null}
-                <span className="mr-1 ml-auto shrink-0">
-                  <RecommendationChip
-                    recommendation={position.ai.recommendation}
-                    className="px-1.5 py-px text-[9px]"
-                  />
-                </span>
+                {ai ? (
+                  <span className="mr-1 ml-auto shrink-0">
+                    <RecommendationChip
+                      recommendation={ai.recommendation}
+                      className="px-1.5 py-px text-[9px]"
+                    />
+                  </span>
+                ) : null}
               </div>
               <div className="mt-1.5 flex items-center gap-1.5">
                 <p className="text-[9px] font-extrabold tracking-[0.08em] text-white uppercase">
                   Notes
                 </p>
-                <AIConvictionBadge
-                  score={position.ai.conviction}
-                  delta={position.ai.convictionDelta}
-                  size="xs"
-                  showLabel={false}
-                  className="ml-auto shrink-0"
-                />
+                {ai ? (
+                  <AIConvictionBadge
+                    score={ai.conviction}
+                    delta={ai.convictionDelta}
+                    size="xs"
+                    showLabel={false}
+                    className="ml-auto shrink-0"
+                  />
+                ) : null}
               </div>
               <ul className="mt-1 overflow-hidden">
                 {noteItems.map((item) => (
@@ -248,12 +256,14 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
       </div>
 
       <div className="mt-2.5 hidden flex-wrap items-center gap-1.5 lg:flex">
-        <AIConvictionBadge
-          score={position.ai.conviction}
-          delta={position.ai.convictionDelta}
-          size="sm"
-        />
-        <RecommendationChip recommendation={position.ai.recommendation} />
+        {ai ? (
+          <>
+            <AIConvictionBadge score={ai.conviction} delta={ai.convictionDelta} size="sm" />
+            <RecommendationChip recommendation={ai.recommendation} />
+          </>
+        ) : (
+          <AIUnavailableChip />
+        )}
       </div>
 
       {/* Two stacked stat rows on the left, contract analytics filling the

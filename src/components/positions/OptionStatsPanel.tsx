@@ -150,8 +150,12 @@ export function optionStatLine(
     }
     case 'vega':
       return { label: 'Vega', value: estimateVega(contract, underlying).toFixed(2) }
-    case 'iv':
-      return { label: 'IV', value: `${estimateImpliedVol(contract, underlying).toFixed(1)}%` }
+    case 'iv': {
+      // No extrinsic base means no in-browser IV to back out. Real IV arrives
+      // with the mnd chain (Wave B0); until then "—" is the honest answer.
+      const iv = estimateImpliedVol(contract, underlying)
+      return { label: 'IV', value: iv === undefined ? '—' : `${iv.toFixed(1)}%` }
+    }
     case 'volume':
       return { label: 'Vol', value: compact(estimateLiquidity(contract, symbol).volume) }
     case 'openInterest':

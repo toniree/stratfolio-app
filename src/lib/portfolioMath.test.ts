@@ -97,6 +97,8 @@ describe('portfolio totals', () => {
     expect(totals.marketValue).toBe(0)
     expect(totals.dayPlPct).toBe(0)
     expect(totals.totalReturnPct).toBe(0)
-    expect(totals.weightedConviction).toBe(0)
+    // Undefined, not 0: an empty book has no conviction to average, and a 0
+    // would render as "the model has no conviction in your holdings".
+    expect(totals.weightedConviction).toBeUndefined()
   })
 })

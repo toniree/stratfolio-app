@@ -22,7 +22,11 @@ export function optionMark(contract: OptionContract, underlying: number): number
   // underlying so the curve behaves the same for a $20 and a $700 stock.
   const width = Math.max(underlying * 0.3, 1)
   const gap = (underlying - contract.strike) / width
-  const extrinsic = contract.extrinsicBase * Math.exp(-(gap * gap))
+  // A live contract carries no `extrinsicBase` — real time value comes from
+  // the mnd chain (Wave B0), and guessing it in the browser is exactly the
+  // IV/OI fabrication plan §6 removes. With none, the mark is pure intrinsic:
+  // understated, but not invented.
+  const extrinsic = (contract.extrinsicBase ?? 0) * Math.exp(-(gap * gap))
 
   return Math.max(0.01, Math.round((intrinsic + extrinsic) * 100) / 100)
 }
@@ -90,11 +94,20 @@ export function estimateVega(contract: OptionContract, underlying: number): numb
 }
 
 /**
- * Implied vol backed out of the contract's own extrinsic base, annualised
+ * Implied vol backed out of the demo book's own extrinsic base, annualised
  * over the time left. Stands in for a solver against a real vol surface.
+ *
+ * Returns `undefined` for a contract with no `extrinsicBase` — i.e. every live
+ * one. Real IV comes from the mnd chain in Wave B0 (HKP-MND-1); inventing a
+ * number here is the in-browser IV fabrication §6 deletes, and a caller that
+ * prints "—" is telling the truth.
  */
-export function estimateImpliedVol(contract: OptionContract, underlying: number): number {
+export function estimateImpliedVol(
+  contract: OptionContract,
+  underlying: number,
+): number | undefined {
   if (underlying <= 0) return 0
+  if (contract.extrinsicBase === undefined) return undefined
   const years = Math.max(daysToExpiry(contract), 1) / 365
   // Brenner–Subrahmanyam: atm premium ≈ 0.4 · S · σ · √T
   const iv = contract.extrinsicBase / (0.4 * underlying * Math.sqrt(years))

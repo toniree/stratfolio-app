@@ -76,8 +76,13 @@ describe('MockPortfolioApi', () => {
   it('returns chart points in chronological order with the current value normalized to one', async () => {
     const api = new MockPortfolioApi()
 
-    const points = await api.getPerformance('demo', '1M')
+    const series = await api.getPerformance('demo', '1M')
+    const points = series.points
 
+    // The demo series is relative by construction, so the chart may scale it
+    // against the live portfolio value. A settled-equity series must not be.
+    expect(series.basis).toBe('relative-multiplier')
+    expect(series.provenance).toBe('mock')
     expect(points).toHaveLength(66)
     expect(points.at(-1)?.multiplier).toBeCloseTo(1, 12)
     expect(points.every((point, index) => index === 0 || point.time > points[index - 1].time)).toBe(

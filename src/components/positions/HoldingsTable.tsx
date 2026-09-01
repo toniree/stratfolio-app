@@ -12,6 +12,7 @@ import {
 import type { PositionValuation } from '@/lib/portfolioMath'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
+import { AIUnavailableChip } from '@/components/intelligence/AIUnavailable'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { PositionTile } from '@/components/positions/PositionTile'
 import { moneynessLabel } from '@/lib/optionMath'
@@ -162,12 +163,18 @@ export function HoldingsTable({
 
                     <td className="py-3">
                       <div className="flex flex-nowrap items-center gap-1.5">
-                        <AIConvictionBadge
-                          score={position.ai.conviction}
-                          size="sm"
-                          showLabel={false}
-                        />
-                        <RecommendationChip recommendation={position.ai.recommendation} />
+                        {position.ai ? (
+                          <>
+                            <AIConvictionBadge
+                              score={position.ai.conviction}
+                              size="sm"
+                              showLabel={false}
+                            />
+                            <RecommendationChip recommendation={position.ai.recommendation} />
+                          </>
+                        ) : (
+                          <AIUnavailableChip />
+                        )}
                       </div>
                     </td>
 

@@ -33,6 +33,8 @@ export function AppShell() {
   const brokerageCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const position of positions ?? []) {
+      // Live positions carry no brokerage (one paper portfolio, HKP-PLT-6).
+      if (!position.brokerageId) continue
       counts[position.brokerageId] = (counts[position.brokerageId] ?? 0) + 1
     }
     return counts

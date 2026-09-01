@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "ignorePatterns": ["dist", "coverage", "node_modules", "public/service-worker.js"],
+  "overrides": [
+    {
+      "files": ["src/api/http/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/api/mock/**", "@/api/mock/*", "@/api/mock/**"],
+                "message": "D4: live adapters must not import demo fixtures. Backend-unservable data stays mocked and labeled at the seam (src/api/index.ts), never fabricated inside an HTTP adapter."
+              },
+              {
+                "group": ["**/api/marketData/MarketDataSimulator*", "@/api/marketData/MarketDataSimulator*"],
+                "message": "D4: live adapters must not import the price simulator. Live quotes come from the mnd facade in Wave B0 (HKP-MND-1)."
+              },
+              {
+                "group": ["**/lib/prng*", "@/lib/prng"],
+                "message": "D4: live adapters must not seed values from a PRNG. Missing data stays missing (plan §6)."
+              },
+              {
+                "group": ["**/lib/thesisPlan*", "**/lib/plannerPrompt*", "**/lib/planPrompt*"],
+                "message": "D4: client-side plan heuristics are deleted from live mode (plan §3.3)."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

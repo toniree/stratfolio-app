@@ -248,7 +248,14 @@ export function ManualCloseTicket({
             <div className="flex items-center justify-between gap-3 border-t border-line pt-2.5">
               <dt className="text-[11.5px] text-ink-soft">Send to</dt>
               <dd>
-                <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+                {/* Live positions sit in one paper portfolio with no brokerage
+                    to send to (HKP-PLT-6). Manual close is disabled in live
+                    mode anyway until bkt grows an exit route (HKP-BKT-1). */}
+                {position.brokerageId ? (
+                  <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+                ) : (
+                  <span className="text-[11.5px] font-semibold text-ink">Paper account</span>
+                )}
               </dd>
             </div>
           </dl>
@@ -336,18 +343,20 @@ function CloseRow({
 function CloseOrderSent({ order, unit }: { order: Order; unit: string }) {
   return (
     <div className="py-2 text-center">
-      <OrderRoutingAnimation brokerageId={order.brokerageId} />
+      {order.brokerageId ? <OrderRoutingAnimation brokerageId={order.brokerageId} /> : null}
       <h3 className="mt-4 text-[18px] font-extrabold tracking-[-0.02em] text-ink">
         Sent to your broker
       </h3>
       <p className="mx-auto mt-1.5 max-w-[330px] text-[12.5px] leading-relaxed text-ink-soft">
-        Sell {formatQty(order.quantity)} {unit} of {order.symbol} at approximately{' '}
-        {formatMoney(order.price)}.
+        Sell {formatQty(order.quantity)} {unit} of {order.symbol}
+        {order.price === undefined ? '' : ` at approximately ${formatMoney(order.price)}`}.
       </p>
       <dl className="liquid-inset mt-4 space-y-2.5 rounded-[18px] p-3.5 text-left">
         <CloseRow label="Order ID" value={order.id.toUpperCase()} />
         <CloseRow label="Status" value="Submitted · awaiting fill" />
-        <CloseRow label="Estimated credit" value={formatMoney(order.estimatedValue)} emphasis />
+        {order.estimatedValue === undefined ? null : (
+          <CloseRow label="Estimated credit" value={formatMoney(order.estimatedValue)} emphasis />
+        )}
       </dl>
     </div>
   )

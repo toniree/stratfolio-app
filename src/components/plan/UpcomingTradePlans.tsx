@@ -184,7 +184,7 @@ export function UpcomingTradePlans({
                       {/* Contract rides directly on the ticker so the two read as
                           one identifier, at full brightness rather than dimmed. */}
                       <span className="num truncate text-[10.5px] font-bold text-ink">
-                        {compactContractRight(plan.contractDetail ?? plan.company)}
+                        {compactContractRight(plan.contractDetail ?? plan.company ?? plan.symbol)}
                       </span>
                       <span
                         className={cn(
@@ -455,7 +455,9 @@ export function UpcomingTradePlans({
               <span className="num block">
                 {disableConfirmation.symbol}{' '}
                 {compactContractRight(
-                  disableConfirmation.contractDetail ?? disableConfirmation.company,
+                  disableConfirmation.contractDetail ??
+                    disableConfirmation.company ??
+                    disableConfirmation.symbol,
                 )}
                 ?
               </span>
@@ -517,7 +519,9 @@ export function UpcomingTradePlans({
               <DisableFact
                 label={planIntent(disableConfirmation) === 'close' ? 'Closes' : 'Opens'}
                 value={compactContractRight(
-                  disableConfirmation.contractDetail ?? disableConfirmation.company,
+                  disableConfirmation.contractDetail ??
+                    disableConfirmation.company ??
+                    disableConfirmation.symbol,
                 )}
               />
               <DisableFact
@@ -727,6 +731,16 @@ function formatRange(low: number, high: number): string {
   return low === high ? formatMoney(low) : `${formatMoney(low)}–${formatMoney(high)}`
 }
 
+/**
+ * The not-yet-open position a ticket previews for a plan.
+ *
+ * It used to synthesise a whole `AIAssessment` — conviction 70, a BUY
+ * recommendation, a 2:1 risk/reward — for any plan that lacked one, and the
+ * ticket then printed "StratFolio AI currently rates X at 70/100 conviction"
+ * about a model output that never existed. With `ai` optional (D3) the
+ * assessment simply passes through, and the ticket renders no AI block when
+ * there is none.
+ */
 function orderPositionFromPlan(plan: PlannerIdea): Position {
   const price = (plan.entryLow + plan.entryHigh) / 2
   return {
@@ -735,23 +749,10 @@ function orderPositionFromPlan(plan: PlannerIdea): Position {
     company: plan.company,
     assetType: plan.assetType,
     contractDetail: plan.contractDetail,
-    brokerageId: 'robinhood',
     quantity: 3,
     avgCost: price,
     openedAt: new Date().toISOString(),
-    ai: plan.ai ?? {
-      conviction: 70,
-      convictionDelta: 0,
-      recommendation: 'BUY',
-      upsideTarget: (plan.targetLow + plan.targetHigh) / 2,
-      downsideRisk: plan.stop,
-      riskRewardRatio: 2,
-      horizon: plan.horizon,
-      targetLow: plan.targetLow,
-      targetHigh: plan.targetHigh,
-      thesis: [plan.title],
-      recommendationNote: plan.notes,
-      updatedAt: plan.createdAt,
-    },
+    ai: plan.ai,
+    provenance: plan.provenance,
   }
 }

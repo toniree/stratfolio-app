@@ -86,8 +86,12 @@ export interface PortfolioTotals {
   /** Largest single holding as a share of total market value, 0–100. */
   topWeightPct: number
   topWeightSymbol: string
-  /** Weighted average AI conviction across holdings, 0–100. */
-  weightedConviction: number
+  /**
+   * Weighted average AI conviction across assessed holdings, 0–100.
+   * Undefined when nothing in the book carries an assessment — not 0, which
+   * would read as "the model has no conviction" rather than "no data".
+   */
+  weightedConviction?: number
 }
 
 export function computeTotals(positions: Position[], prices: PriceMap): PortfolioTotals {
@@ -107,10 +111,17 @@ export function computeTotals(positions: Position[], prices: PriceMap): Portfoli
     }
   }
 
+  // Weighted over *assessed* value only, and `undefined` when nothing in the
+  // book has an assessment. Folding an unassessed position in as 0 conviction
+  // would drag the book's average down purely as a side effect of the backend
+  // not exposing episode content (HKP-AI-1) — a fabricated zero.
+  const assessed = valuations.filter((v) => v.position.ai !== undefined)
+  const assessedValue = assessed.reduce((s, v) => s + v.marketValue, 0)
   const weightedConviction =
-    marketValue > 0
-      ? valuations.reduce((s, v) => s + v.position.ai.conviction * v.marketValue, 0) / marketValue
-      : 0
+    assessedValue > 0
+      ? assessed.reduce((s, v) => s + (v.position.ai?.conviction ?? 0) * v.marketValue, 0) /
+        assessedValue
+      : undefined
 
   const openValue = marketValue - dayPl
   return {

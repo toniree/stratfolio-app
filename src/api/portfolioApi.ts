@@ -4,7 +4,7 @@ import type {
   Order,
   OrderRequest,
   PerformancePeriod,
-  PerformancePoint,
+  PerformanceSeries,
   PortfolioAccount,
   PortfolioMeta,
   PortfolioOutlook,
@@ -29,10 +29,17 @@ export interface PortfolioApi {
   getPositions(accountId: string): Promise<Position[]>
   getMeta(accountId: string): Promise<PortfolioMeta>
   getOutlook(accountId: string): Promise<PortfolioOutlook>
-  getPerformance(accountId: string, period: PerformancePeriod): Promise<PerformancePoint[]>
+  getPerformance(accountId: string, period: PerformancePeriod): Promise<PerformanceSeries>
   submitOrder(request: OrderRequest): Promise<Order>
   addPositionFromIdea(accountId: string, ideaId: string, quantity: number): Promise<Position>
   getActivity(): Promise<ActivityEvent[]>
+  /**
+   * Order history. Promoted to the seam because live mode has to *merge* three
+   * sources — plt silent trades (fills and closes), plt trade plans that are
+   * validated-but-unfilled or rejected, and session-retained bkt outcomes that
+   * left no durable row (NO_FILL / platform_error, HKP-BKT-4).
+   */
+  getOrders(): Promise<Order[]>
 }
 
 export interface IdeasApi {

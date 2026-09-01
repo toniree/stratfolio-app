@@ -1,4 +1,4 @@
-import type { AIAssessment, AssetType, IdeaCategory } from '@/api/types'
+import type { AIAssessment, AssetType, IdeaCategory, Provenance } from '@/api/types'
 
 export type NewsSentiment = 'bullish' | 'bearish' | 'neutral'
 
@@ -23,17 +23,54 @@ export interface NewsArticle {
   readMinutes: number
   /** Id of the optional AI plan derived from this article. */
   tradeIdeaId?: string
+  provenance?: Provenance
 }
 
 export type PlannerIdeaSource = 'ai' | 'user'
 export type PlannerDirection = 'LONG' | 'SHORT'
-export type PlannerStatus = 'draft' | 'watching' | 'ready'
 export type PlannerIntent = 'open' | 'close'
 
-/** One executable condition on a trade plan, with live met/unmet state. */
+/**
+ * Plan status.
+ *
+ * The first three are local-only states for plans that have never reached the
+ * platform service. The rest are the complete plt `TradePlanStatus` enum
+ * (`PROPOSED | VALIDATED | REJECTED | EXECUTED | CANCELLED`) lower-cased —
+ * every value must be handled, including `cancelled`, which the enum defines
+ * but no plt service path currently sets (HKP-PLT-4).
+ */
+export type PlannerStatus =
+  | 'draft'
+  | 'watching'
+  | 'ready'
+  | 'proposed'
+  | 'validated'
+  | 'rejected'
+  | 'executed'
+  | 'cancelled'
+
+/** Statuses that came from plt rather than local state. */
+export const PLATFORM_PLAN_STATUSES = [
+  'proposed',
+  'validated',
+  'rejected',
+  'executed',
+  'cancelled',
+] as const
+
+/**
+ * Whether a criterion currently holds.
+ *
+ * `unknown` is the honest default and the only value a live plan can carry:
+ * no backend owns typed entry criteria (HKP-XSV-1), so nothing can evaluate
+ * one. It replaces the PRNG coin-flip `met: boolean` that §6 deletes.
+ */
+export type CriterionState = 'met' | 'unmet' | 'unknown'
+
+/** One condition on a trade plan, with its evaluation state. */
 export interface PlanCriterion {
   text: string
-  met: boolean
+  state: CriterionState
 }
 
 export interface PlannerIdea {
@@ -42,7 +79,8 @@ export interface PlannerIdea {
   positionId?: string
   source: PlannerIdeaSource
   symbol: string
-  company: string
+  /** Optional — no live-safe symbol→company source exists (HKP-MND-4). */
+  company?: string
   assetType: AssetType
   contractDetail?: string
   direction: PlannerDirection
@@ -72,12 +110,15 @@ export interface PlannerIdea {
   sourceArticleHeadline?: string
   /** Free-form related-news context for user-created position plans. */
   relatedNews?: string
-  /** Concrete, checkable execution conditions; generated when absent. */
+  /** Free-text conditions recorded with the plan. Nothing evaluates them. */
   criteria?: PlanCriterion[]
   /** One to three option contracts or setups monitored for this plan. */
   watchedOptions?: string[]
   /** AI ideas carry a full assessment; user ideas get a lightweight one. */
   ai?: AIAssessment
+  /** PolicyGate `rejection_reasons[]`, verbatim, when status is `rejected`. */
+  rejectionReasons?: string[]
+  provenance?: Provenance
 }
 
 export interface CreatePlannerIdeaInput {

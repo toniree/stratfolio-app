@@ -136,7 +136,9 @@ export function ThesisTileFooter({
       kind: 'thesis',
       id: idea.id,
       label: contract,
-      detail: `${idea.ai.recommendation} · ${idea.ai.conviction}/100 conviction`,
+      detail: idea.ai
+        ? `${idea.ai.recommendation} · ${idea.ai.conviction}/100 conviction`
+        : undefined,
       to: `/app/thesis/${idea.id}`,
     })
   }
@@ -157,7 +159,9 @@ export function ThesisTileFooter({
       kind: 'thesis',
       id: idea.id,
       label: contract,
-      detail: `${idea.ai.recommendation} · ${idea.ai.conviction}/100 conviction`,
+      detail: idea.ai
+        ? `${idea.ai.recommendation} · ${idea.ai.conviction}/100 conviction`
+        : undefined,
       to: `/app/thesis/${idea.id}`,
     })
   }

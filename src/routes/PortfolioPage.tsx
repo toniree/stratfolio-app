@@ -61,6 +61,8 @@ export function PortfolioPage() {
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
     for (const p of positions ?? []) {
+      // Live positions carry no brokerage (one paper portfolio, HKP-PLT-6).
+      if (!p.brokerageId) continue
       result[p.brokerageId] = (result[p.brokerageId] ?? 0) + 1
     }
     return result
@@ -86,7 +88,7 @@ export function PortfolioPage() {
     return ordered
   }, [visible])
 
-  const periodStartMultiplier = performance?.[0]?.multiplier ?? 1
+  const periodStartMultiplier = performance?.points[0]?.multiplier ?? 1
   const periodStartValue = totals.marketValue * periodStartMultiplier
   const periodReturn = period === '1D' ? totals.dayPl : totals.marketValue - periodStartValue
   const periodReturnPct =
@@ -143,12 +145,22 @@ export function PortfolioPage() {
       </div>
       <div className="mt-3">
         {performance && totals.marketValue > 0 ? (
-          <PerformanceChart
-            points={performance}
-            currentValue={totals.marketValue}
-            positive={positive}
-            height={260}
-          />
+          <>
+            <PerformanceChart
+              series={performance}
+              currentValue={totals.marketValue}
+              positive={positive}
+              height={260}
+            />
+            {/* The chart says what it is drawing. A settled-equity curve is
+                realised P&L from closed trades, not the marked book. */}
+            <p className="mt-1.5 text-center text-[10.5px] text-ink-muted">
+              {performance.label}
+              {performance.truncated
+                ? ' · older history is missing (plt caps lists at 500 rows)'
+                : ''}
+            </p>
+          </>
         ) : (
           <Skeleton className="h-[260px] rounded-2xl" />
         )}

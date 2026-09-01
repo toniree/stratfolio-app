@@ -17,18 +17,28 @@ export interface ThesisPage {
  * what proves me wrong.
  */
 export function thesisPages(idea: Idea, a: ThesisAnalytics): ThesisPage[] {
-  const cheap = a.ivPremiumPct < 0
   const insideCone = a.cushion >= 1
+  // The vol line only appears when there is a real implied vol to compare
+  // against realised — not for equities, and not for a live contract before
+  // the mnd chain lands (HKP-MND-1).
+  const volLine =
+    a.iv !== undefined && a.ivPremiumPct !== undefined
+      ? `IV ${a.iv.toFixed(0)} vs HV ${a.hv.toFixed(0)} — premium is ${
+          a.ivPremiumPct < 0 ? 'cheap' : 'rich'
+        } by ${Math.abs(a.ivPremiumPct).toFixed(0)}%.`
+      : undefined
 
   return [
     {
       label: 'Thesis',
-      bullets: [idea.ai.recommendationNote, ...idea.ai.thesis].filter(Boolean).slice(0, 3),
+      bullets: [idea.ai?.recommendationNote, ...(idea.ai?.thesis ?? [])]
+        .filter((bullet): bullet is string => Boolean(bullet))
+        .slice(0, 3),
     },
     {
       label: 'Edge',
       bullets: [
-        `IV ${a.iv.toFixed(0)} vs HV ${a.hv.toFixed(0)} — premium is ${cheap ? 'cheap' : 'rich'} by ${Math.abs(a.ivPremiumPct).toFixed(0)}%.`,
+        ...(volLine ? [volLine] : []),
         `Needs ${a.requiredMovePct.toFixed(1)}% against a ±${a.expectedMovePct.toFixed(1)}% expected move${insideCone ? ' — inside the cone.' : ' — beyond the cone.'}`,
         `Model marks it at ${a.modelValue.toFixed(2)} against ${a.debit.toFixed(2)} paid.`,
       ],
@@ -119,13 +129,15 @@ export function ThesisRail({
         <p className="text-[9px] font-extrabold tracking-[0.08em] text-white uppercase">
           {page.label}
         </p>
-        <AIConvictionBadge
-          score={idea.ai.conviction}
-          delta={idea.ai.convictionDelta}
-          size="xs"
-          showLabel={false}
-          className="ml-auto shrink-0"
-        />
+        {idea.ai ? (
+          <AIConvictionBadge
+            score={idea.ai.conviction}
+            delta={idea.ai.convictionDelta}
+            size="xs"
+            showLabel={false}
+            className="ml-auto shrink-0"
+          />
+        ) : null}
       </div>
 
       <div className="relative mt-1 min-h-0 flex-1">

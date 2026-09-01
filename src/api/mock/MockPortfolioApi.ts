@@ -3,7 +3,7 @@ import type {
   Order,
   OrderRequest,
   PerformancePeriod,
-  PerformancePoint,
+  PerformanceSeries,
   PortfolioAccount,
   PortfolioMeta,
   PortfolioOutlook,
@@ -109,13 +109,15 @@ export class MockPortfolioApi implements PortfolioApi {
 
   async getAccounts(): Promise<PortfolioAccount[]> {
     await latency(90)
-    return DEMO_ACCOUNTS
+    return DEMO_ACCOUNTS.map((account) => ({ ...account, provenance: 'mock' as const }))
   }
 
   async getPositions(accountId: string): Promise<Position[]> {
     await latency(220)
     const ids = new Set(this.accountMembership[accountId] ?? this.accountMembership.demo)
-    return this.positions.filter((p) => ids.has(p.id)).map((p) => ({ ...p }))
+    return this.positions
+      .filter((p) => ids.has(p.id))
+      .map((p) => ({ ...p, provenance: 'mock' as const }))
   }
 
   async getMeta(accountId: string): Promise<PortfolioMeta> {
@@ -125,14 +127,15 @@ export class MockPortfolioApi implements PortfolioApi {
     const totalDeposited = this.positions
       .filter((p) => ids.has(p.id))
       .reduce((sum, p) => sum + p.avgCost * p.quantity * (p.assetType === 'option' ? 100 : 1), 0)
-    return { ...base, totalDeposited }
+    return { ...base, totalDeposited, provenance: 'mock' }
   }
 
   async getOutlook(accountId: string): Promise<PortfolioOutlook> {
     await latency(260)
-    if (accountId === 'demo') return DEMO_OUTLOOK
+    if (accountId === 'demo') return { ...DEMO_OUTLOOK, provenance: 'mock' }
     return {
       ...DEMO_OUTLOOK,
+      provenance: 'mock',
       headline:
         accountId === 'growth'
           ? 'High-conviction sleeve is performing, but it is a single-factor bet on AI compute.'
@@ -142,10 +145,7 @@ export class MockPortfolioApi implements PortfolioApi {
     }
   }
 
-  async getPerformance(
-    accountId: string,
-    period: PerformancePeriod,
-  ): Promise<PerformancePoint[]> {
+  async getPerformance(accountId: string, period: PerformancePeriod): Promise<PerformanceSeries> {
     await latency(180)
     const cfg = PERIOD_CONFIG[period]
     const rand = mulberry32(hashString(`${accountId}:${period}`))
@@ -166,16 +166,30 @@ export class MockPortfolioApi implements PortfolioApi {
       raw.push(level)
     }
     const last = raw[raw.length - 1]
-    return raw.map((value, i) => ({
-      time: now - (cfg.points - 1 - i) * cfg.stepSeconds,
-      multiplier: value / last,
-    }))
+    return {
+      // The demo series is relative by construction — the chart scales it
+      // against the live portfolio value so the right edge and the hero number
+      // always agree. The live adapter returns a `settled-equity` series
+      // instead, which must never be scaled that way (plan §3.1).
+      basis: 'relative-multiplier',
+      label: 'Simulated portfolio value',
+      provenance: 'mock',
+      points: raw.map((value, i) => ({
+        time: now - (cfg.points - 1 - i) * cfg.stepSeconds,
+        multiplier: value / last,
+      })),
+    }
   }
 
   async submitOrder(request: OrderRequest): Promise<Order> {
     await latency(520)
     const position = this.positions.find((p) => p.id === request.positionId)
     const multiplier = position?.assetType === 'option' ? 100 : 1
+    const estimatedValue = request.quantity * request.estimatedPrice * multiplier
+    // The demo book is brokerage-flavoured; live orders carry no brokerage at
+    // all (one paper portfolio, HKP-PLT-6), which is why this defaults here
+    // rather than in the shared view model.
+    const brokerageId = request.brokerageId ?? position?.brokerageId ?? 'robinhood'
     const order: Order = {
       id: `ord-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4).toString(36)}`,
       symbol: request.symbol,
@@ -183,22 +197,24 @@ export class MockPortfolioApi implements PortfolioApi {
       side: request.side,
       quantity: request.quantity,
       price: request.estimatedPrice,
-      estimatedValue: request.quantity * request.estimatedPrice * multiplier,
-      brokerageId: request.brokerageId,
+      estimatedValue,
+      brokerageId,
       status: 'SUBMITTED',
       submittedAt: new Date().toISOString(),
+      provenance: 'mock',
     }
     this.orders.unshift(order)
     this.activity.unshift({
       id: `act-${order.id}`,
       kind: 'order',
       title: `${request.side === 'BUY' ? 'Buy' : 'Sell'} ${request.quantity} ${request.symbol} submitted`,
-      detail: `${request.limitPrice ? `Limit ${request.limitPrice.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}` : 'Market'} order · est. ${order.estimatedValue.toLocaleString('en-US', {
+      detail: `${request.limitPrice ? `Limit ${request.limitPrice.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}` : 'Market'} order · est. ${estimatedValue.toLocaleString('en-US', {
         style: 'currency',
         currency: 'USD',
-      })} · ${getBrokerage(request.brokerageId).short} ${getBrokerage(request.brokerageId).accountMask}`,
+      })} · ${getBrokerage(brokerageId).short} ${getBrokerage(brokerageId).accountMask}`,
       symbol: request.symbol,
       at: order.submittedAt,
+      provenance: 'mock',
     })
 
     this.persist()
@@ -243,7 +259,8 @@ export class MockPortfolioApi implements PortfolioApi {
       quantity,
       avgCost: entryPrice,
       openedAt: new Date().toISOString(),
-      ai: { ...idea.ai },
+      ai: idea.ai ? { ...idea.ai } : undefined,
+      provenance: 'mock',
     }
     this.positions.push(position)
     for (const key of Object.keys(this.accountMembership)) {
@@ -272,10 +289,12 @@ export class MockPortfolioApi implements PortfolioApi {
     return this.activity
       .slice()
       .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .map((event) => ({ ...event, provenance: 'mock' as const }))
   }
 
-  getOrders(): Order[] {
-    return this.orders
+  async getOrders(): Promise<Order[]> {
+    await latency(140)
+    return this.orders.map((order) => ({ ...order }))
   }
 }
 

@@ -10,7 +10,7 @@ import {
   formatSignedPercent,
 } from '@/lib/format'
 import type { PositionValuation } from '@/lib/portfolioMath'
-import type { PerformancePeriod, PerformancePoint } from '@/api/types'
+import type { PerformancePeriod, PerformanceSeries } from '@/api/types'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
@@ -67,7 +67,7 @@ export function MobilePositionsSummary({
   dayPl: number
   dayPlPct: number
   cash: number
-  performance?: PerformancePoint[]
+  performance?: PerformanceSeries
   period?: PerformancePeriod
   onPeriodChange?: (period: PerformancePeriod) => void
 }) {
@@ -114,15 +114,19 @@ export function MobilePositionsSummary({
       </div>
 
       <div className="liquid-inset mt-2.5 overflow-hidden rounded-[16px] pt-2 pb-1 pl-2">
-        {(performance?.length ?? 0) > 1 ? (
+        {performance && performance.points.length > 1 ? (
           <div>
             <PerformanceChart
-              points={performance ?? []}
+              series={performance}
               currentValue={marketValue}
               positive={positive}
               height={142}
               showAxes
             />
+            <p className="px-2 pb-1 text-[8.5px] font-semibold tracking-[0.04em] text-ink-muted uppercase">
+              {performance.label}
+              {performance.truncated ? ' · truncated at 500 trades' : ''}
+            </p>
           </div>
         ) : (
           <Skeleton className="mb-1.5 h-[136px] rounded-xl" />
@@ -325,16 +329,20 @@ export function MobileHoldingsTable({
                             {position.symbol}
                           </span>
                           <span className="absolute top-[-2mm] left-[calc(100%+5mm)] z-10 inline-flex shrink-0 flex-col items-end gap-px">
-                            <RecommendationChip
-                              recommendation={position.ai.recommendation}
-                              className="shrink-0 px-0.5 py-px text-[5.5px]"
-                            />
-                            <AIConvictionBadge
-                              score={position.ai.conviction}
-                              delta={position.ai.convictionDelta}
-                              size="xs"
-                              className="h-[14.5px] gap-0 px-0.5 text-[7.25px] opacity-80"
-                            />
+                            {position.ai ? (
+                              <>
+                                <RecommendationChip
+                                  recommendation={position.ai.recommendation}
+                                  className="shrink-0 px-0.5 py-px text-[5.5px]"
+                                />
+                                <AIConvictionBadge
+                                  score={position.ai.conviction}
+                                  delta={position.ai.convictionDelta}
+                                  size="xs"
+                                  className="h-[14.5px] gap-0 px-0.5 text-[7.25px] opacity-80"
+                                />
+                              </>
+                            ) : null}
                           </span>
                         </div>
                         <div className="num mt-1 truncate text-[9.75px] font-medium text-[#f4f7fb]">

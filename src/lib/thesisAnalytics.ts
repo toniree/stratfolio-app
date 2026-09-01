@@ -19,14 +19,21 @@ export interface ThesisAnalytics {
   daysToExpiry: number
   years: number
 
-  /** Implied volatility, in vol points. */
-  iv: number
+  /**
+   * Implied volatility, in vol points.
+   *
+   * Absent whenever there is nothing to back it out of — every live contract,
+   * and equities, which have no option at all. Echoing realised vol under an
+   * IV label (what this used to do for equities) is the fabricated-IV problem
+   * plan §6 removes; real IV arrives with the mnd chain in Wave B0.
+   */
+  iv?: number
   /** Realised volatility of the underlying, in vol points. */
   hv: number
   /** IV over HV as a percentage; positive means premium is rich. */
-  ivPremiumPct: number
+  ivPremiumPct?: number
   /** Where IV sits in its trailing range, 0–100. */
-  ivRank: number
+  ivRank?: number
 
   /** One-sigma move to expiry, as a percentage of spot. */
   expectedMovePct: number
@@ -98,8 +105,11 @@ export function thesisAnalytics(idea: Idea, spot: number, history: number[]): Th
 
   const dte = Math.max(daysToExpiry(contract), 1)
   const years = dte / 365
+  // No extrinsic base means no in-browser IV. Real IV arrives with the mnd
+  // chain (Wave B0); until then the analytics fall back to realised vol and
+  // report `iv` as absent rather than echoing HV under an IV label.
   const iv = estimateImpliedVol(contract, spot)
-  const volatility = iv / 100
+  const volatility = (iv ?? hv) / 100
   const right = contract.right
 
   const model = blackScholes({
@@ -150,8 +160,8 @@ export function thesisAnalytics(idea: Idea, spot: number, history: number[]): Th
     years,
     iv,
     hv,
-    ivPremiumPct: hv > 0 ? (iv / hv - 1) * 100 : 0,
-    ivRank: impliedVolRank(idea.symbol, iv),
+    ivPremiumPct: iv !== undefined && hv > 0 ? (iv / hv - 1) * 100 : undefined,
+    ivRank: iv === undefined ? undefined : impliedVolRank(idea.symbol, iv),
     expectedMovePct,
     requiredMovePct,
     cushion,
@@ -188,7 +198,11 @@ function equityAnalytics(
   entry: number,
   target: number,
 ): ThesisAnalytics {
-  const stop = idea.ai.downsideRisk > 0 ? idea.ai.downsideRisk : entry * 0.85
+  // With no model assessment there is no published downside level, so this
+  // takes the same entry-derived fallback the "no downside" branch already
+  // used rather than inventing a stop.
+  const downsideRisk = idea.ai?.downsideRisk ?? 0
+  const stop = downsideRisk > 0 ? downsideRisk : entry * 0.85
   const risk = Math.max(entry - stop, entry * 0.05)
   const reward = Math.max(target - entry, 0)
   const shares = Math.max(1, Math.floor(RISK_BUDGET / Math.max(risk, 1)))
@@ -201,10 +215,12 @@ function equityAnalytics(
     spot,
     daysToExpiry: 90,
     years,
-    iv: hv,
+    // Equities have no contract and therefore no implied vol. This used to
+    // report `iv: hv` — realised vol wearing an IV label.
+    iv: undefined,
     hv,
-    ivPremiumPct: 0,
-    ivRank: impliedVolRank(idea.symbol, hv),
+    ivPremiumPct: undefined,
+    ivRank: undefined,
     expectedMovePct: volatility * Math.sqrt(years) * 100,
     requiredMovePct: Math.abs((entry - spot) / Math.max(spot, 1)) * 100,
     cushion: 1,

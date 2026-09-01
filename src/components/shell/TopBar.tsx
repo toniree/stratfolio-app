@@ -32,6 +32,9 @@ export function TopBar() {
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
     for (const position of positions ?? []) {
+      // Live positions carry no brokerage (one paper portfolio, HKP-PLT-6), so
+      // they simply do not contribute to a per-brokerage count.
+      if (!position.brokerageId) continue
       result[position.brokerageId] = (result[position.brokerageId] ?? 0) + 1
     }
     return result

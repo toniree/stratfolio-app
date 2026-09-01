@@ -30,6 +30,8 @@ export function PositionsPage() {
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
     for (const p of positions ?? []) {
+      // Live positions carry no brokerage (one paper portfolio, HKP-PLT-6).
+      if (!p.brokerageId) continue
       result[p.brokerageId] = (result[p.brokerageId] ?? 0) + 1
     }
     return result

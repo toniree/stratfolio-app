@@ -204,19 +204,27 @@ export function thesisStatLine(id: ThesisStatField, a: ThesisAnalytics): ThesisS
   const label = option?.label ?? id
 
   switch (id) {
-    case 'ivRank':
+    // Both IV stats are absent whenever there is no implied vol to read —
+    // every live contract until the mnd chain lands (HKP-MND-1), and every
+    // equity. "—" beats a number derived from realised vol wearing an IV label.
+    case 'ivRank': {
+      const ivRank = a.ivRank
       return {
         label,
-        value: a.ivRank.toFixed(0),
+        value: ivRank === undefined ? '—' : ivRank.toFixed(0),
         // Cheap premium favours the buyer these theses are written for.
-        tone: a.ivRank <= 35 ? 'up' : a.ivRank >= 70 ? 'down' : undefined,
+        tone:
+          ivRank === undefined ? undefined : ivRank <= 35 ? 'up' : ivRank >= 70 ? 'down' : undefined,
       }
-    case 'ivHv':
+    }
+    case 'ivHv': {
+      const ivPremiumPct = a.ivPremiumPct
       return {
         label,
-        value: signedPct(a.ivPremiumPct, 0),
-        tone: a.ivPremiumPct <= 0 ? 'up' : 'down',
+        value: ivPremiumPct === undefined ? '—' : signedPct(ivPremiumPct, 0),
+        tone: ivPremiumPct === undefined ? undefined : ivPremiumPct <= 0 ? 'up' : 'down',
       }
+    }
     case 'model':
       return {
         label,

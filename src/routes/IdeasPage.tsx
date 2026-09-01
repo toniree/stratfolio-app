@@ -22,7 +22,7 @@ export function IdeasPage() {
     return open.filter(
       (idea) =>
         idea.symbol.toUpperCase().includes(term) ||
-        idea.company.toUpperCase().includes(term),
+        (idea.company?.toUpperCase().includes(term) ?? false),
     )
   }, [ideas, query, thesisDecisions])
 

@@ -1,5 +1,4 @@
 import type { PlanCriterion, PlannerIdea, PlannerIntent } from '@/api/newsTypes'
-import { hashString, mulberry32 } from '@/lib/prng'
 import { formatMoney } from '@/lib/format'
 
 export function planIntent(plan: PlannerIdea): PlannerIntent {
@@ -17,56 +16,50 @@ export function watchedPlanOptions(plan: PlannerIdea): string[] {
   return []
 }
 
-/** Technical setups the generator can attach to an entry-side plan. */
-const OPEN_SETUPS = [
-  'holds a bounce off the 21d VWAP on 1.5× average volume',
-  'reclaims the 15d SMA after a 3%+ drawdown',
-  'carries a 30d IV rank below the 40th percentile at fill',
-  'prints a positive daily MACD (12/26) cross',
-  'holds 14d RSI above 45 on the retest',
-]
-
-/** Exit-side setups — momentum and liquidity conditions for selling. */
-const CLOSE_SETUPS = [
-  '14d RSI stretches above 70 — sell into strength',
-  'first daily close back under the 5d EMA',
-  'bid/ask spread inside 4% of mark at the exit print',
-  '10d realised vol above its 30d mean — premium is bid',
-]
-
 /**
- * The checkable conditions a plan executes against.
+ * The conditions recorded with a plan.
  *
- * Seeded plans carry hand-written criteria; everything else gets a
- * deterministic set derived from the plan's own numbers, so two renders of
- * the same plan always agree on both wording and met/unmet state.
+ * Two things this deliberately no longer does (plan §6):
+ *
+ * 1. It does not invent technical setups. It used to pick a phrase like
+ *    "holds a bounce off the 21d VWAP" from a pool and attribute it to the
+ *    user's plan. The plan never said that.
+ * 2. It does not decide whether a criterion is met. It used to coin-flip a
+ *    PRNG. **No backend owns typed entry criteria** — plt's and bkt's
+ *    structured criteria are *exit* rules and nothing evaluates an entry
+ *    condition (HKP-XSV-1) — so `unknown` is the only truthful state for a
+ *    derived criterion.
+ *
+ * What survives is a restatement of the plan's own numbers, which is not new
+ * information: the entry/exit band and the stop are fields the user (or plt's
+ * `target_entry_min`/`target_entry_max`, which PolicyGate really does
+ * validate) already set.
  */
 export function planCriteria(plan: PlannerIdea): PlanCriterion[] {
   if (plan.criteria?.length) return plan.criteria
-  const rand = mulberry32(hashString(plan.id))
-  const pick = (pool: string[]) => pool[Math.floor(rand() * pool.length)]
-  if (planIntent(plan) === 'close') {
-    return [
-      {
-        text: `Mark reaches the ${formatMoney(plan.targetLow)}–${formatMoney(plan.targetHigh)} exit band`,
-        met: rand() > 0.45,
-      },
-      { text: `${plan.symbol} ${pick(CLOSE_SETUPS)}`, met: rand() > 0.5 },
-      plan.stop > 0
-        ? { text: `Hard invalidation: close below the ${formatMoney(plan.stop)} stop`, met: false }
-        : { text: 'Defined risk: full premium is the maximum loss', met: true },
-    ]
-  }
-  return [
-    {
-      text: `Premium inside the ${formatMoney(plan.entryLow)}–${formatMoney(plan.entryHigh)} entry band`,
-      met: true,
-    },
-    { text: `${plan.symbol} ${pick(OPEN_SETUPS)}`, met: rand() > 0.5 },
+  const bandCriterion: PlanCriterion =
+    planIntent(plan) === 'close'
+      ? {
+          text: `Mark reaches the ${formatMoney(plan.targetLow)}–${formatMoney(plan.targetHigh)} exit band`,
+          state: 'unknown',
+        }
+      : {
+          text: `Premium inside the ${formatMoney(plan.entryLow)}–${formatMoney(plan.entryHigh)} entry band`,
+          state: 'unknown',
+        }
+  const riskCriterion: PlanCriterion =
     plan.stop > 0
-      ? { text: `No daily close below the ${formatMoney(plan.stop)} stop`, met: rand() > 0.35 }
-      : { text: 'Defined risk: full premium is the maximum loss', met: true },
-  ]
+      ? {
+          text:
+            planIntent(plan) === 'close'
+              ? `Hard invalidation: close below the ${formatMoney(plan.stop)} stop`
+              : `No daily close below the ${formatMoney(plan.stop)} stop`,
+          state: 'unknown',
+        }
+      : // Not a market condition — a structural fact about a long option, so
+        // it is genuinely known.
+        { text: 'Defined risk: full premium is the maximum loss', state: 'met' }
+  return [bandCriterion, riskCriterion]
 }
 
 export interface PlanExitSummary {
