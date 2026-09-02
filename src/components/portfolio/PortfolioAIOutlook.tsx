@@ -18,7 +18,7 @@ export function PortfolioAIOutlook({
   loading,
 }: {
   outlook?: PortfolioOutlook
-  weightedConviction: number
+  weightedConviction?: number
   loading?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -51,7 +51,10 @@ export function PortfolioAIOutlook({
 
         <div className="mt-3.5 flex flex-wrap items-center gap-4">
           <ScoreDial label={outlook.scoreLabel} score={outlook.score} />
-          <ScoreDial label="Weighted conviction" score={Math.round(weightedConviction)} />
+          {/* Nothing assessed means no weighted conviction to draw. */}
+          {weightedConviction === undefined ? null : (
+            <ScoreDial label="Weighted conviction" score={Math.round(weightedConviction)} />
+          )}
         </div>
 
         <button

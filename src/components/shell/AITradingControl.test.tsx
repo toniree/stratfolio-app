@@ -2,12 +2,15 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AITradingControl, CompactAITradingToggle } from '@/components/shell/AITradingControl'
 import { useUiStore } from '@/store/uiStore'
+import { QueryWrapper } from '@/test/queryWrapper'
 
 describe('CompactAITradingToggle', () => {
   beforeEach(() => useUiStore.setState({ aiTradingEnabled: false }))
 
   it('shares a real on/off state', () => {
-    render(<CompactAITradingToggle />)
+    // The switch reads plt's policy in live mode, so it sits under a query
+    // provider even in mock mode, where it falls back to the local store.
+    render(<CompactAITradingToggle />, { wrapper: QueryWrapper })
 
     const toggle = screen.getByRole('switch', { name: 'AI Trading off' })
     const track = toggle.querySelector('[aria-hidden]')
@@ -25,18 +28,18 @@ describe('CompactAITradingToggle', () => {
     expect(enabledToggle).not.toHaveClass('rounded-full', 'border-line')
     expect(enabledToggle).not.toHaveClass('text-emerald-200')
     expect(thumb).toHaveClass('left-0.5', 'bg-[#42dda0]')
+    // No autonomous entry loop exists (HKP-XSV-1), so the copy must not
+    // promise one.
     expect(screen.getByRole('status')).toHaveTextContent(
-      'All active plans can execute automatically.',
+      'The model may draft plans. Entry always needs an explicit action.',
     )
     fireEvent.click(enabledToggle)
 
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Only plans you created by hand or approved will execute automatically.',
-    )
+    expect(screen.getByRole('status')).toHaveTextContent('The model will not draft plans.')
   })
 
   it('uses the same real toggle and confirmation on full-size surfaces', () => {
-    render(<AITradingControl />)
+    render(<AITradingControl />, { wrapper: QueryWrapper })
 
     fireEvent.click(screen.getByRole('switch', { name: 'AI Trading off' }))
 

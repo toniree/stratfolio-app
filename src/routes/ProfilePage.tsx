@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { LogOut, RotateCcw } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { authApi } from '@/api'
@@ -73,6 +73,20 @@ export function ProfilePage() {
         <p className="mt-3 text-[11.5px] text-ink-muted">
           Simulated connections. No real brokerage account is linked in this build.
         </p>
+      </section>
+
+      <section className="card p-4">
+        <h2 className="text-[13px] font-bold tracking-[0.07em] text-ink-muted uppercase">
+          Active universe
+        </h2>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">
+          The symbols the decision engine evaluates — with real capacity limits, pinning and symbol
+          validation. This is not your terminal watchlist: adding a ticker to the tape is a viewing
+          choice, adding one here changes what the model works on.
+        </p>
+        <Button asChild variant="secondary" size="sm" className="mt-3">
+          <Link to="/app/universe">Manage the active universe</Link>
+        </Button>
       </section>
 
       <section className="card space-y-3 p-4">

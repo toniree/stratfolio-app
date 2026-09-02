@@ -66,9 +66,15 @@ export function PositionQuickView({
         : [],
     [contract, historyDays, position.symbol, underlyingPrice],
   )
+  // The exit zone is derived entirely from the model's target band, so with no
+  // assessment there is no exit zone to draw — not a zero-width one at the
+  // entry price, which would read as "the model expects no move".
   const exit = useMemo(
-    () => estimateOptionExit(position.avgCost, ai.targetLow, ai.targetHigh, position.quantity),
-    [ai.targetHigh, ai.targetLow, position.avgCost, position.quantity],
+    () =>
+      ai
+        ? estimateOptionExit(position.avgCost, ai.targetLow, ai.targetHigh, position.quantity)
+        : undefined,
+    [ai, position.avgCost, position.quantity],
   )
 
   // Underlying reference levels: the strike, and the breakeven at expiry.
@@ -92,17 +98,21 @@ export function PositionQuickView({
   // the total position profit at both edges, including the 100x multiplier.
   const premiumLines = useMemo<MarketChartReferenceLine[]>(
     () => [
-      {
-        price: exit.exitLow,
-        color: '#34d399',
-        title: `Exit low ${formatMoney(exit.exitLow)} · ${formatSignedMoney(exit.profitLow)}`,
-        dashed: true,
-      },
-      {
-        price: exit.exitHigh,
-        color: '#34d399',
-        title: `Exit high ${formatMoney(exit.exitHigh)} · ${formatSignedMoney(exit.profitHigh)}`,
-      },
+      ...(exit
+        ? [
+            {
+              price: exit.exitLow,
+              color: '#34d399',
+              title: `Exit low ${formatMoney(exit.exitLow)} · ${formatSignedMoney(exit.profitLow)}`,
+              dashed: true,
+            },
+            {
+              price: exit.exitHigh,
+              color: '#34d399',
+              title: `Exit high ${formatMoney(exit.exitHigh)} · ${formatSignedMoney(exit.profitHigh)}`,
+            },
+          ]
+        : []),
       {
         price: position.avgCost,
         color: '#c4cfdd',
@@ -160,23 +170,27 @@ export function PositionQuickView({
         />
         <PlanStat
           label="Estimated exit zone"
-          value={`${formatMoney(exit.exitLow)} – ${formatMoney(exit.exitHigh)}`}
-          hint="Per-contract premium"
+          value={exit ? `${formatMoney(exit.exitLow)} – ${formatMoney(exit.exitHigh)}` : '—'}
+          hint={exit ? 'Per-contract premium' : 'No model target band recorded'}
         />
         <PlanStat
           label="Estimated profit"
-          value={`${formatSignedMoney(exit.profitLow)} – ${formatSignedMoney(exit.profitHigh)}`}
-          hint={`${formatSignedPercent(exit.returnLowPct, 1)} – ${formatSignedPercent(exit.returnHighPct, 1)} on cost`}
+          value={
+            exit ? `${formatSignedMoney(exit.profitLow)} – ${formatSignedMoney(exit.profitHigh)}` : '—'
+          }
+          hint={
+            exit
+              ? `${formatSignedPercent(exit.returnLowPct, 1)} – ${formatSignedPercent(exit.returnHighPct, 1)} on cost`
+              : undefined
+          }
           tone="up"
         />
       </dl>
 
       {showRecommendation || showDetailsLink ? (
         <div className="lg:col-span-2">
-          {showRecommendation ? (
-            <p className="text-[12.5px] leading-relaxed text-ink-soft">
-              {ai.recommendationNote}
-            </p>
+          {showRecommendation && ai ? (
+            <p className="text-[12.5px] leading-relaxed text-ink-soft">{ai.recommendationNote}</p>
           ) : null}
           {showDetailsLink ? (
             <div className={cn('flex flex-wrap gap-2', showRecommendation && 'mt-3')}>
@@ -353,7 +367,7 @@ function PlanStat({
 }: {
   label: string
   value: string
-  hint: string
+  hint?: string
   tone?: 'up'
 }) {
   return (
@@ -364,7 +378,7 @@ function PlanStat({
       <dd className={cn('num mt-1 text-[12.5px] font-bold', tone === 'up' ? 'text-up' : 'text-ink')}>
         {value}
       </dd>
-      <dd className="num mt-0.5 text-[10.5px] text-ink-muted">{hint}</dd>
+      {hint ? <dd className="num mt-0.5 text-[10.5px] text-ink-muted">{hint}</dd> : null}
     </div>
   )
 }

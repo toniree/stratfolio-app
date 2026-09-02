@@ -12,7 +12,8 @@ import {
 import { cn } from '@/lib/cn'
 import { useUpdatePlannerIdea } from '@/hooks/queries'
 import { adjustPlanFromPrompt } from '@/lib/planPrompt'
-import { formatMoney, formatQty, formatSignedMoney } from '@/lib/format'
+import { recordUserDecision } from '@/api/http/userActivity'
+import { formatMoneyOr, MISSING, formatMoney, formatQty, formatSignedMoney } from '@/lib/format'
 import { sortPlansByTriggerSoon, triggerSoonPercent } from '@/lib/plannerSort'
 import type { PlannerIdea } from '@/api/newsTypes'
 import type { Position } from '@/api/types'
@@ -20,11 +21,11 @@ import type { PositionValuation } from '@/lib/portfolioMath'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
-import { planExitSummary, planIntent, watchedPlanOptions } from '@/lib/planIntent'
+import { planExitSummary, planIntent, planTitle, watchedPlanOptions } from '@/lib/planIntent'
 import { PlanCriteriaList } from '@/components/plan/PlanCriteriaList'
 import { Modal } from '@/components/ui/Modal'
 import { usePlanExecutionStore } from '@/store/planExecutionStore'
-import { useUiStore } from '@/store/uiStore'
+import { useAiTradingSwitch } from '@/hooks/policyQueries'
 import { PlanStopwatchIcon } from '@/components/plan/PlanStopwatchIcon'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 
@@ -43,7 +44,10 @@ export function UpcomingTradePlans({
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showAllPlans, setShowAllPlans] = useState(false)
-  const aiTradingEnabled = useUiStore((state) => state.aiTradingEnabled)
+  // In live mode this is plt's `policy.ai_trading_enabled`, not a browser
+  // preference: the same switch the execution service reads before it will
+  // accept an entry at all (§16/§17).
+  const aiTradingEnabled = useAiTradingSwitch().enabled
   const [executionId, setExecutionId] = useState<string | null>(null)
   const disabledIds = usePlanExecutionStore((state) => state.disabledIds)
   const disablePlan = usePlanExecutionStore((state) => state.disablePlan)
@@ -67,7 +71,7 @@ export function UpcomingTradePlans({
     : undefined
   const executionPrice =
     executionValuation?.price ??
-    (executionPlan ? (executionPlan.entryLow + executionPlan.entryHigh) / 2 : 0)
+    (executionPlan ? planEntryMid(executionPlan) ?? 0 : 0)
 
   useEffect(
     () => () => {
@@ -144,7 +148,7 @@ export function UpcomingTradePlans({
             // AI Trading only governs AI-authored automation. User-authored
             // plans remain active when the global AI toggle is off.
             const inert = disabled || (!aiTradingEnabled && !userMade)
-            const lastPrompt = plan.originalPrompt ?? plan.title
+            const lastPrompt = plan.originalPrompt ?? planTitle(plan)
             const exit = planExitSummary(plan, valuation?.marketValue ?? maxAmount)
 
             return (
@@ -184,7 +188,7 @@ export function UpcomingTradePlans({
                       {/* Contract rides directly on the ticker so the two read as
                           one identifier, at full brightness rather than dimmed. */}
                       <span className="num truncate text-[10.5px] font-bold text-ink">
-                        {compactContractRight(plan.contractDetail ?? plan.company)}
+                        {compactContractRight(plan.contractDetail ?? plan.company ?? plan.symbol)}
                       </span>
                       <span
                         className={cn(
@@ -378,6 +382,14 @@ export function UpcomingTradePlans({
                         onClick={(event) => {
                           if (disabled) {
                             activatePlan(plan.id)
+                            // plt has no route that re-enables a plan
+                            // (HKP-PLT-4), so the durable trace of the decision
+                            // is an audit row; the state itself stays local.
+                            void recordUserDecision({
+                              decision: 'PLAN_ENABLED',
+                              entityType: 'trade_plan',
+                              entityId: plan.id,
+                            })
                           } else {
                             event.preventDefault()
                           }
@@ -455,7 +467,9 @@ export function UpcomingTradePlans({
               <span className="num block">
                 {disableConfirmation.symbol}{' '}
                 {compactContractRight(
-                  disableConfirmation.contractDetail ?? disableConfirmation.company,
+                  disableConfirmation.contractDetail ??
+                    disableConfirmation.company ??
+                    disableConfirmation.symbol,
                 )}
                 ?
               </span>
@@ -487,6 +501,15 @@ export function UpcomingTradePlans({
                 if (plan) {
                   disablePlan(plan.id)
                   const note = disableReason.trim()
+                  // Local state plus a schema-valid `USER_ACTIVITY` row: plt
+                  // exposes no update route and no path sets CANCELLED
+                  // (HKP-PLT-4), so this is the only durable record there is.
+                  void recordUserDecision({
+                    decision: 'PLAN_DISABLED',
+                    entityType: 'trade_plan',
+                    entityId: plan.id,
+                    reason: note || undefined,
+                  })
                   // Why a plan was switched off is the signal worth keeping, so
                   // it rides along to the assistant rather than being discarded.
                   if (note) {
@@ -517,7 +540,9 @@ export function UpcomingTradePlans({
               <DisableFact
                 label={planIntent(disableConfirmation) === 'close' ? 'Closes' : 'Opens'}
                 value={compactContractRight(
-                  disableConfirmation.contractDetail ?? disableConfirmation.company,
+                  disableConfirmation.contractDetail ??
+                    disableConfirmation.company ??
+                    disableConfirmation.symbol,
                 )}
               />
               <DisableFact
@@ -531,10 +556,10 @@ export function UpcomingTradePlans({
               />
               <DisableFact
                 label="Stop"
-                value={formatMoney(disableConfirmation.stop)}
+                value={formatMoneyOr(disableConfirmation.stop)}
                 tone="down"
               />
-              <DisableFact label="Horizon" value={disableConfirmation.horizon} />
+              <DisableFact label="Horizon" value={disableConfirmation.horizon ?? MISSING} />
               <DisableFact
                 label="Readiness"
                 value={triggerSoonPercent(disableConfirmation)}
@@ -561,8 +586,14 @@ export function UpcomingTradePlans({
 }
 
 function PlansExecutionTicker() {
+  // The old copy said these plans were "close to automatic execution by
+  // meeting plan criteria". Nothing evaluates entry criteria and no runtime
+  // enters a position on its own (HKP-XSV-1) — bkt's monitor scans OPEN
+  // positions only, and entry happens on an explicit POST. Describing an
+  // autonomous loop that does not exist is the most consequential fabrication
+  // in the app, because it is a claim about what happens to the user's money.
   const copy =
-    'Trade plans which are active and close to automatic execution by meeting plan criteria are shown below. You can choose to execute the trade plan prematurely, or disable the plan before it executes, from each dropdown.'
+    'Your active trade plans. Nothing here enters a position on its own — use each dropdown to execute a plan yourself, or to disable it.'
 
   return (
     <div className="max-w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_3%,black_94%,transparent)]">
@@ -723,35 +754,45 @@ function PlanPreviewFact({ label, value }: { label: string; value: string }) {
   )
 }
 
-function formatRange(low: number, high: number): string {
-  return low === high ? formatMoney(low) : `${formatMoney(low)}–${formatMoney(high)}`
+function formatRange(low?: number, high?: number): string {
+  // Missing stays missing: plt records no target band and no absolute stop.
+  if (low === undefined && high === undefined) return MISSING
+  const lo = low ?? high!
+  const hi = high ?? low!
+  return lo === hi ? formatMoney(lo) : `${formatMoney(lo)}–${formatMoney(hi)}`
 }
 
+/**
+ * The not-yet-open position a ticket previews for a plan.
+ *
+ * It used to synthesise a whole `AIAssessment` — conviction 70, a BUY
+ * recommendation, a 2:1 risk/reward — for any plan that lacked one, and the
+ * ticket then printed "StratFolio AI currently rates X at 70/100 conviction"
+ * about a model output that never existed. With `ai` optional (D3) the
+ * assessment simply passes through, and the ticket renders no AI block when
+ * there is none.
+ */
 function orderPositionFromPlan(plan: PlannerIdea): Position {
-  const price = (plan.entryLow + plan.entryHigh) / 2
+  // No entry band means no price to preview the ticket against — 0, not an
+  // invented mid, and the ticket renders it as the absence it is.
+  const price = planEntryMid(plan) ?? 0
   return {
     id: `planned-${plan.id}`,
     symbol: plan.symbol,
     company: plan.company,
     assetType: plan.assetType,
     contractDetail: plan.contractDetail,
-    brokerageId: 'robinhood',
     quantity: 3,
     avgCost: price,
     openedAt: new Date().toISOString(),
-    ai: plan.ai ?? {
-      conviction: 70,
-      convictionDelta: 0,
-      recommendation: 'BUY',
-      upsideTarget: (plan.targetLow + plan.targetHigh) / 2,
-      downsideRisk: plan.stop,
-      riskRewardRatio: 2,
-      horizon: plan.horizon,
-      targetLow: plan.targetLow,
-      targetHigh: plan.targetHigh,
-      thesis: [plan.title],
-      recommendationNote: plan.notes,
-      updatedAt: plan.createdAt,
-    },
+    ai: plan.ai,
+    provenance: plan.provenance,
   }
+}
+
+/** The midpoint of a plan's entry band, when it has one. */
+function planEntryMid(plan: PlannerIdea): number | undefined {
+  const { entryLow, entryHigh } = plan
+  if (entryLow === undefined && entryHigh === undefined) return undefined
+  return ((entryLow ?? entryHigh!) + (entryHigh ?? entryLow!)) / 2
 }

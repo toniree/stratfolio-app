@@ -1,0 +1,350 @@
+import type { BktBacktestRun } from '@/api/http/wire/bkt'
+
+/**
+ * Backtest fixtures pinned against the real §19 shapes (APP-122, D9).
+ *
+ * Shaped exactly as `BacktestResult.model_dump(mode="json")` produces them:
+ * every `Decimal` is a **string**, every absent value is an explicit `null`
+ * (bkt does not omit nulls the way plt does), dates are `YYYY-MM-DD`, datetimes
+ * are ISO instants, and enums are their values. The thin buckets carry bkt's
+ * own note with `total_pnl`/`win_rate`/`avg_pnl` nulled, because that is the
+ * shape the "insufficient data (n=X)" rendering exists for.
+ */
+
+export const BACKTEST_ID = '018f6b1e-0000-7000-8000-00000000ab01'
+export const BACKTEST_LEGACY_ID = '018f6b1e-0000-7000-8000-00000000ab02'
+export const BACKTEST_FAILED_ID = '018f6b1e-0000-7000-8000-00000000ab03'
+
+export const BACKTEST_COMPLETED_FIXTURE: BktBacktestRun = {
+  id: BACKTEST_ID,
+  status: 'COMPLETED',
+  strategy_version_id: null,
+  engine_id: 'stratfolio-canonical',
+  fill_model: 'near_ask_buy',
+  dataset_ref: 'synthetic-v1',
+  error: null,
+  result: {
+    engine_id: 'stratfolio-canonical',
+    engine_version: '1',
+    fill_protocol: 'two_quote_band',
+    pending_entries_at_window_end: 2,
+    dataset_ref: {
+      provider: 'replay',
+      dataset_id: 'synthetic-v1',
+      seed: 7,
+      symbols: ['AAPL', 'SPY'],
+      start: '2024-01-02',
+      end: '2024-06-28',
+      request_hash: 'b1f0c9a2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d7e8',
+      mixed_provenance: false,
+    },
+    trades: [
+      {
+        symbol: 'AAPL',
+        contract: {
+          occ_symbol: 'AAPL240419C00185000',
+          option_type: 'CALL',
+          strike: '185.00',
+          expiration: '2024-04-19',
+        },
+        quantity: 1,
+        contract_multiplier: 100,
+        entry_time: '2024-03-14T20:00:00Z',
+        entry_price: '4.35',
+        entry_fees: '0.65',
+        entry_fill_model: 'near_ask_buy',
+        exit_time: '2024-03-28T20:00:00Z',
+        exit_price: '7.10',
+        exit_fees: '0.65',
+        exit_reason: 'PROFIT_TARGET',
+        decision_price: '4.20',
+        fill_price: '4.35',
+        band_max: '4.40',
+        excess: '-0.05',
+        entry_delta: '0.42',
+        entry_iv: '0.31',
+        entry_bid: '4.20',
+        entry_ask: '4.40',
+        entry_mid: '4.30',
+        entry_relative_spread: '0.0465',
+        entry_open_interest: 4210,
+        fill_minus_mid: '0.05',
+        exit_delta: '0.66',
+        exit_iv: '0.29',
+        exit_mid: '7.05',
+        exit_open_interest: 3980,
+        mfe: '310.00',
+        mae: '-45.00',
+        marks: ['12.00', '80.00', '310.00'],
+        marks_truncated: false,
+        mfe_session_index: 2,
+        mae_session_index: 0,
+        sessions_to_mfe: 3,
+        dte_at_entry: 36,
+      },
+      {
+        symbol: 'SPY',
+        contract: {
+          occ_symbol: 'SPY240517C00520000',
+          option_type: 'CALL',
+          strike: '520.00',
+          expiration: '2024-05-17',
+        },
+        quantity: 1,
+        contract_multiplier: 100,
+        entry_time: '2024-04-11T20:00:00Z',
+        entry_price: '3.10',
+        entry_fees: '0.65',
+        entry_fill_model: 'near_ask_buy',
+        exit_time: '2024-04-25T20:00:00Z',
+        exit_price: '1.55',
+        exit_fees: '0.65',
+        exit_reason: 'STOP_LOSS',
+        decision_price: '3.05',
+        fill_price: '3.10',
+        band_max: '3.15',
+        excess: '-0.05',
+        // A provider that served no greeks for this contract: the delta stays
+        // null and the trade buckets under `unknown` rather than under 0.00.
+        entry_delta: null,
+        entry_iv: null,
+        entry_bid: '3.00',
+        entry_ask: '3.20',
+        entry_mid: '3.10',
+        entry_relative_spread: '0.0645',
+        entry_open_interest: 15230,
+        fill_minus_mid: '0.00',
+        mfe: '25.00',
+        mae: '-160.00',
+        marks: ['10.00', '-160.00'],
+        marks_truncated: false,
+        mfe_session_index: 0,
+        mae_session_index: 1,
+        sessions_to_mfe: 1,
+        dte_at_entry: 36,
+      },
+    ],
+    no_fill_events: [
+      {
+        symbol: 'AAPL',
+        occ_symbol: 'AAPL240419C00190000',
+        reason: 'ENTRY_PRICE_ABOVE_BAND',
+        decision_date: '2024-02-15',
+        fill_date: '2024-02-16',
+        decision_price: '3.10',
+        fill_price: '3.60',
+        band_max: '3.20',
+        excess: '0.40',
+      },
+      {
+        symbol: 'SPY',
+        occ_symbol: 'SPY240517C00530000',
+        reason: 'CONTRACT_NOT_QUOTED',
+        decision_date: '2024-03-01',
+        fill_date: '2024-03-04',
+        decision_price: '2.05',
+        fill_price: null,
+        band_max: null,
+        excess: null,
+      },
+    ],
+    metrics: {
+      trade_count: 2,
+      open_trades: 0,
+      total_pnl: '119.70',
+      win_rate: '0.5',
+      loss_rate: '0.5',
+      avg_gain: '273.70',
+      avg_loss: '-154.00',
+      profit_factor: '1.777',
+      expectancy: '59.85',
+      avg_time_in_trade_days: '14',
+      sharpe_ratio: null,
+      sharpe_note: 'fewer than 20 trades',
+      max_drawdown_marked: '-160.00',
+      max_drawdown_realized: '-154.00',
+      drawdown_basis: 'marked-equity',
+      by_dte_bucket: {
+        '22-45': { trade_count: 2, total_pnl: '119.70', win_rate: '0.5', avg_pnl: '59.85' },
+      },
+      by_option_type: {
+        CALL: { trade_count: 2, total_pnl: '119.70', win_rate: '0.5', avg_pnl: '59.85' },
+      },
+      // §19.4: thin buckets report their count and withhold every ratio.
+      by_delta_bucket: {
+        '0.31-0.45': {
+          trade_count: 1,
+          total_pnl: null,
+          win_rate: null,
+          avg_pnl: null,
+          note: 'fewer than 5 trades in this bucket: no statistics reported',
+        },
+        unknown: {
+          trade_count: 1,
+          total_pnl: null,
+          win_rate: null,
+          avg_pnl: null,
+          note: 'fewer than 5 trades in this bucket: no statistics reported',
+        },
+      },
+      by_ticker: {
+        AAPL: {
+          trade_count: 1,
+          total_pnl: null,
+          win_rate: null,
+          avg_pnl: null,
+          note: 'fewer than 5 trades in this bucket: no statistics reported',
+        },
+        SPY: {
+          trade_count: 1,
+          total_pnl: null,
+          win_rate: null,
+          avg_pnl: null,
+          note: 'fewer than 5 trades in this bucket: no statistics reported',
+        },
+      },
+      by_exit_reason: {
+        PROFIT_TARGET: {
+          trade_count: 1,
+          total_pnl: null,
+          win_rate: null,
+          avg_pnl: null,
+          note: 'fewer than 5 trades in this bucket: no statistics reported',
+        },
+        STOP_LOSS: {
+          trade_count: 1,
+          total_pnl: null,
+          win_rate: null,
+          avg_pnl: null,
+          note: 'fewer than 5 trades in this bucket: no statistics reported',
+        },
+      },
+      execution: {
+        fill_protocol: 'two_quote_band',
+        entries_attempted: 4,
+        entries_filled: 2,
+        no_fill_count: 2,
+        no_fill_rate: '0.5',
+        no_fill_by_reason: { CONTRACT_NOT_QUOTED: 1, ENTRY_PRICE_ABOVE_BAND: 1 },
+        pending_entries_at_window_end: 2,
+      },
+      v2: {
+        n_days: 124,
+        initial_capital: '100000',
+        trading_days_per_year: 252,
+        first_session: '2024-01-02',
+        last_session: '2024-06-28',
+        total_return: '0.0011970',
+        cagr: '0.0024',
+        cagr_note: null,
+        sharpe_annualized: '0.41',
+        sharpe_v2_note: {
+          basis: 'daily-marked-returns',
+          n_days: 124,
+          trading_days_per_year: 252,
+          note: null,
+        },
+        sortino_annualized: '0.55',
+        sortino_note: null,
+        max_drawdown_marked_pct: '-0.0016',
+        calmar: '1.5',
+        calmar_note: null,
+        exposure: '0.22',
+        turnover: '0.0074',
+        pnl_concentration_top_trade_share: '1.0',
+        pnl_concentration_note: null,
+      },
+      baselines: {
+        seed: 7,
+        symbol_sessions: 248,
+        no_trade: { total_pnl: '0' },
+        buy_and_hold: {
+          symbols: ['AAPL', 'SPY'],
+          n_days: 124,
+          total_return: '0.081',
+          cagr: '0.17',
+          cagr_note: null,
+          sharpe_annualized: '1.1',
+          sharpe_note: null,
+          max_drawdown_pct: '-0.043',
+        },
+        random_entry: {
+          n: 200,
+          entries: 2,
+          entry_rate: '0.008',
+          total_pnl_p05: '-420.00',
+          total_pnl_p50: '-35.00',
+          total_pnl_p95: '380.00',
+          expectancy_p05: '-210.00',
+          expectancy_p50: '-17.50',
+          expectancy_p95: '190.00',
+          strategy_total_pnl_percentile: '0.72',
+        },
+      },
+    },
+  },
+}
+
+/**
+ * A pre-§19 run: `single_quote_legacy`, no execution block, no BKT-021 buckets.
+ *
+ * The point of this fixture is graceful absence — the panels must render an
+ * explicit "this run does not report it", plus a legacy tag, and never a zero.
+ */
+export const BACKTEST_LEGACY_FIXTURE: BktBacktestRun = {
+  id: BACKTEST_LEGACY_ID,
+  status: 'COMPLETED',
+  engine_id: 'stratfolio-canonical',
+  fill_model: 'near_ask_buy',
+  dataset_ref: 'synthetic-v1',
+  result: {
+    engine_id: 'stratfolio-canonical',
+    engine_version: '1',
+    fill_protocol: 'single_quote_legacy',
+    trades: [],
+    no_fill_events: [],
+    dataset_ref: {
+      provider: 'replay',
+      dataset_id: 'synthetic-v1',
+      symbols: ['SPY'],
+      start: '2023-01-03',
+      end: '2023-06-30',
+      request_hash: 'aa11bb22cc33dd44ee55ff6677889900aa11bb22cc33dd44ee55ff6677889900',
+    },
+    metrics: {
+      trade_count: 0,
+      open_trades: 0,
+      total_pnl: '0',
+      win_rate: null,
+      loss_rate: null,
+      avg_gain: null,
+      avg_loss: null,
+      profit_factor: null,
+      expectancy: null,
+      avg_time_in_trade_days: null,
+      sharpe_ratio: null,
+      sharpe_note: 'no closed trades',
+      max_drawdown_marked: null,
+      max_drawdown_realized: '0',
+      drawdown_basis: 'realized-equity',
+      by_dte_bucket: {},
+      by_option_type: {},
+    },
+  },
+}
+
+export const BACKTEST_FAILED_FIXTURE: BktBacktestRun = {
+  id: BACKTEST_FAILED_ID,
+  status: 'FAILED',
+  engine_id: 'stratfolio-canonical',
+  error: 'market data unavailable for SPY on 2024-03-05',
+  result: null,
+}
+
+/** bkt's 422 for a request that broke a bounded-execution cap. */
+export const BACKTEST_REJECTED_PROBLEM = {
+  type: 'https://stratfolio.local/problems/validation-error',
+  title: 'Backtest rejected',
+  status: 422,
+  rejection_reasons: ['SYMBOL_DAY_LIMIT_EXCEEDED'],
+}

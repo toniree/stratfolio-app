@@ -3,6 +3,8 @@ import { useUiStore } from '@/store/uiStore'
 import { usePrices } from '@/store/priceStore'
 import { usePerformance, usePortfolioMeta, usePositions } from '@/hooks/queries'
 import { computeTotals } from '@/lib/portfolioMath'
+import { useOptionMarks } from '@/hooks/marketQueries'
+import { dayPlOver } from '@/lib/dayChange'
 import { BrokerageFilter } from '@/components/portfolio/BrokerageFilter'
 import { PositionList } from '@/components/positions/PositionList'
 import {
@@ -10,7 +12,6 @@ import {
   MobilePositionsSummary,
 } from '@/components/positions/MobileHoldingsTable'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { formatSignedMoney, formatSignedPercent } from '@/lib/format'
 import { BROKERAGES } from '@/data/brokerages'
 import { BrokerageLogo } from '@/components/shared/BrokerageBadge'
 import type { PerformancePeriod } from '@/api/types'
@@ -25,11 +26,17 @@ export function PositionsPage() {
   const { data: meta } = usePortfolioMeta(accountId)
   const { data: performance } = usePerformance(accountId, summaryPeriod)
 
-  const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  const { marks } = useOptionMarks(positions)
+  const totals = useMemo(
+    () => computeTotals(positions ?? [], prices, marks),
+    [positions, prices, marks],
+  )
 
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
     for (const p of positions ?? []) {
+      // Live positions carry no brokerage (one paper portfolio, HKP-PLT-6).
+      if (!p.brokerageId) continue
       result[p.brokerageId] = (result[p.brokerageId] ?? 0) + 1
     }
     return result
@@ -44,6 +51,9 @@ export function PositionsPage() {
   }, [totals.valuations, brokerageFilter])
 
   const visibleValue = visible.reduce((s, v) => s + v.marketValue, 0)
+  // Availability is a property of the *filtered* set: a brokerage view can be
+  // fully measurable while the whole book is not, and vice versa.
+  const visibleDay = dayPlOver(visible)
   const visibleDayPl = visible.reduce((s, v) => s + v.dayPl, 0)
   const visibleTotalPl = visible.reduce((s, v) => s + v.totalReturn, 0)
   const visibleCostBasis = visible.reduce((s, v) => s + v.costBasis, 0)
@@ -72,15 +82,17 @@ export function PositionsPage() {
         mobileSubtitle="Use the header brokerage dropdown to view positions by broker."
         aside={
           <span
-            className={`num hidden text-[14px] font-bold lg:inline ${visibleDayPl >= 0 ? 'text-up' : 'text-down'}`}
+            title={visibleDay.title}
+            aria-label={visibleDay.accessible}
+            className={`num hidden text-[14px] font-bold lg:inline ${
+              visibleDay.tone === 'up'
+                ? 'text-up'
+                : visibleDay.tone === 'down'
+                  ? 'text-down'
+                  : 'text-ink-muted'
+            }`}
           >
-            {formatSignedMoney(visibleDayPl)} (
-            {formatSignedPercent(
-              visibleValue - visibleDayPl > 0
-                ? (visibleDayPl / (visibleValue - visibleDayPl)) * 100
-                : 0,
-            )}
-            ) today
+            {visibleDay.available ? `${visibleDay.combined} today` : '— today'}
           </span>
         }
       />
@@ -96,6 +108,7 @@ export function PositionsPage() {
           totalPlPct={visibleTotalPlPct}
           dayPl={visibleDayPl}
           dayPlPct={visibleDayPlPct}
+          dayPlAvailable={visibleDay.available}
           cash={meta?.cash ?? 0}
           performance={performance}
           period={summaryPeriod}

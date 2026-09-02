@@ -15,12 +15,21 @@ export function MobilePortfolioSummary({
   cash,
   dayPl,
   dayPlPct,
+  dayPlAvailable = true,
   loading = false,
 }: {
   marketValue: number
   cash: number
   dayPl: number
   dayPlPct: number
+  /**
+   * False when at least one holding has no prior mark to measure a day change
+   * against — the V1 facade exposes no historical chain, so a freshly marked
+   * option has a *current* price and no yesterday. The sum would then be a
+   * partial one, and a partial day P&L printed as a whole is a lie of
+   * omission; it renders "—" instead.
+   */
+  dayPlAvailable?: boolean
   loading?: boolean
 }) {
   const lines: SummaryLine[] = loading
@@ -40,15 +49,21 @@ export function MobilePortfolioSummary({
           value: formatMoney(cash),
           accessibleValue: formatMoney(cash),
         },
-        {
-          label: 'Day P/L',
-          // Value and cash carry cents; the day move stays compact so the
-          // three lines keep a similar width.
-          value: formatSignedCompact(dayPl),
-          percent: formatSignedPercent(dayPlPct, 1),
-          accessibleValue: `${formatSignedMoney(dayPl)} (${formatSignedPercent(dayPlPct)})`,
-          tone: dayPl >= 0 ? 'up' : 'down',
-        },
+        dayPlAvailable
+          ? {
+              label: 'Day P/L',
+              // Value and cash carry cents; the day move stays compact so the
+              // three lines keep a similar width.
+              value: formatSignedCompact(dayPl),
+              percent: formatSignedPercent(dayPlPct, 1),
+              accessibleValue: `${formatSignedMoney(dayPl)} (${formatSignedPercent(dayPlPct)})`,
+              tone: dayPl >= 0 ? ('up' as const) : ('down' as const),
+            }
+          : {
+              label: 'Day P/L',
+              value: '—',
+              accessibleValue: 'unavailable — no prior mark for every holding',
+            },
       ]
 
   return (

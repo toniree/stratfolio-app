@@ -1,19 +1,357 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Info, SendHorizontal } from 'lucide-react'
+import { CheckCircle2, CircleSlash, Info, SendHorizontal } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatMoney, formatQty, formatSignedMoney } from '@/lib/format'
 import type { Order, Position } from '@/api/types'
-import { useSubmitOrder } from '@/hooks/queries'
+import { useRequestExit, useSubmitOrder } from '@/hooks/queries'
+import { idempotencyKeys, newIdempotencyKey } from '@/api/http/idempotency'
+import { ApiError } from '@/api/http/problem'
 import { BrokerageBadge } from '@/components/shared/BrokerageBadge'
 import { Button } from '@/components/ui/Button'
 import { HoldToConfirmButton } from '@/components/ui/HoldToConfirmButton'
 import { Modal } from '@/components/ui/Modal'
 import { PositionContextPanel } from '@/components/positions/PositionContextPanel'
 import { OrderRoutingAnimation } from '@/components/trade/OrderRoutingAnimation'
+import { isLive } from '@/api/http/env'
 
 type OrderType = 'MARKET' | 'LIMIT'
 
-export function ManualCloseTicket({
+/**
+ * Whether a user can close this position by hand.
+ *
+ * **True in live mode as of APP-114** (BKT-018 / contracts §17). bkt now has a
+ * user-initiated exit route, and it is the monitor's own path with the rule
+ * evaluation removed: the price is measured from the current mnd quote through
+ * the exit fill model, the reason is fixed server-side to `USER_CLOSE`, and the
+ * EXIT row is written before plt is told. Nothing about the fill is supplied by
+ * this browser, which is exactly why the button may exist now and could not
+ * before.
+ *
+ * The one live case that is still unavailable: a position plt did not link to a
+ * silent trade. `POST /executions/exits` takes a `silent_trade_id` and nothing
+ * else, and there is no id the app could invent in its place.
+ */
+export function isManualCloseAvailable(position?: Pick<Position, 'silentTradeId'>): boolean {
+  if (!isLive('portfolio')) return true
+  return position?.silentTradeId !== undefined
+}
+
+/**
+ * Closing a position by hand.
+ *
+ * Two genuinely different products behind one entry point, chosen by data mode
+ * rather than by a prop:
+ *
+ *  - **live** — a *request to exit*. No limit price and no partial quantity,
+ *    because bkt's deterministic fill model takes neither: the whole trade
+ *    closes at the price the model computes from the current quote. The ticket
+ *    that showed a limit field would be promising control the backend does not
+ *    offer.
+ *  - **mock** — the demo's simulated brokerage close, untouched, with its
+ *    quantity slider, limit/market toggle and routing animation. It writes to a
+ *    demo book and its copy says so.
+ */
+export function ManualCloseTicket(props: {
+  position: Position
+  price: number
+  /** Prior session's option mark, used to derive the simulated last price. */
+  previousClose?: number
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  if (isLive('portfolio')) {
+    return (
+      <SilentExitTicket
+        position={props.position}
+        price={props.price}
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+      />
+    )
+  }
+  return <SimulatedCloseTicket {...props} />
+}
+
+/**
+ * The live path: `POST /bkt/api/v1/executions/exits` (contracts §17).
+ *
+ * Key discipline is the same as the open ticket's (D6) and matters more here:
+ * a close is a live operation a human retries on a slow network. A failed
+ * *request* keeps its key, so a retry is answered with the recorded outcome
+ * (200) rather than a second attempt against a newer quote. A returned
+ * *outcome* — FILLED or NO_FILL — ends the operation, and a deliberate second
+ * try after a NO_FILL mints a fresh key, because a NO_FILL left the position
+ * open and a new attempt is a new operation.
+ */
+function SilentExitTicket({
+  position,
+  price,
+  open,
+  onOpenChange,
+}: {
+  position: Position
+  price: number
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const [order, setOrder] = useState<Order | null>(null)
+  const operationId = useRef(newIdempotencyKey('exit'))
+  const requestExit = useRequestExit()
+  const available = isManualCloseAvailable(position)
+
+  useEffect(() => {
+    if (!open) return
+    setOrder(null)
+    operationId.current = newIdempotencyKey('exit')
+    requestExit.reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, position.id])
+
+  const error = requestExit.error instanceof ApiError ? requestExit.error : undefined
+
+  const send = async () => {
+    if (!available) return
+    let result: Order
+    try {
+      result = await requestExit.mutateAsync({
+        positionId: position.id,
+        silentTradeId: position.silentTradeId,
+        symbol: position.symbol,
+        quantity: position.quantity,
+        idempotencyKey: idempotencyKeys.keyFor(operationId.current, 'exit'),
+      })
+    } catch {
+      // The request failed, so the operation is *not* over and its key is
+      // deliberately kept: "Hold to retry" re-sends the same operation and bkt
+      // answers with whatever it recorded, if anything.
+      return
+    }
+    idempotencyKeys.retireOperation(operationId.current)
+    setOrder(result)
+  }
+
+  const startNewAttempt = () => {
+    operationId.current = newIdempotencyKey('exit')
+    requestExit.reset()
+    setOrder(null)
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        order ? (
+          'Exit result'
+        ) : (
+          <span className="-mt-[2mm] flex min-w-0 items-baseline gap-2">
+            <span className="shrink-0">Close {position.symbol}</span>
+            <span className="num min-w-0 truncate text-[14px] font-bold text-ink uppercase">
+              {position.contractDetail ?? ''}
+            </span>
+          </span>
+        )
+      }
+      description={
+        order ? undefined : 'Silent paper exit — nothing is routed to a broker.'
+      }
+      className="sm:w-[min(500px,calc(100vw-2rem))]"
+      footer={
+        order ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              Done
+            </Button>
+            {/* Only a NO_FILL leaves anything to try again: a fill closed the
+                position, and trying again would have nothing to close. */}
+            {order.status === 'NO_FILL' ? (
+              <Button onClick={startNewAttempt}>Try again</Button>
+            ) : null}
+          </div>
+        ) : !available ? (
+          <Button variant="secondary" className="w-full" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        ) : (
+          <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => onOpenChange(false)}
+              disabled={requestExit.isPending}
+            >
+              Cancel
+            </Button>
+            <HoldToConfirmButton
+              variant="success"
+              pending={requestExit.isPending}
+              onComplete={() => void send()}
+            >
+              <SendHorizontal size={15} />
+              {error ? 'Hold to retry' : 'Hold to request exit'}
+            </HoldToConfirmButton>
+          </div>
+        )
+      }
+    >
+      {order ? (
+        <ExitOutcome order={order} mark={price} />
+      ) : !available ? (
+        <Notice>
+          This position is not linked to a silent trade, and the execution service closes silent
+          trades by id. There is no id to stand in for it, so closing by hand is unavailable for
+          this row.
+        </Notice>
+      ) : (
+        <div className="space-y-3">
+          <dl className="liquid-inset space-y-2.5 rounded-[18px] p-3.5">
+            <CloseRow label="Closing" value={`${formatQty(position.quantity)} contracts`} emphasis />
+            <CloseRow label="Mark on this screen" value={formatMoney(price)} />
+            <CloseRow label="Exit reason" value="USER_CLOSE" />
+          </dl>
+
+          <Notice tone="brand">
+            The whole position closes at the price the execution service computes from the current
+            quote — there is no limit price to set, and the fill may differ from the mark above.
+            The reason is recorded as <code>USER_CLOSE</code>.
+          </Notice>
+
+          {error ? <ExitRequestError error={error} /> : null}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+/**
+ * A failed *request*, typed by what bkt actually answers (§17).
+ *
+ * The distinction each message has to carry is whether anything was recorded:
+ * a 503 recorded nothing and the position is untouched, a 409 means someone
+ * else's exit already stands, and a 404 means the trade is not plt's at all.
+ */
+function ExitRequestError({ error }: { error: ApiError }) {
+  const detail =
+    error.status === 404
+      ? 'The platform service has no such silent trade. Nothing was closed.'
+      : error.status === 409
+        ? 'This trade is already closed — its recorded exit stands and is not overwritten. Reload the position list to see it.'
+        : error.status === 503
+          ? 'No current quote for this contract, or the platform service could not be read. Nothing was recorded and the position is unchanged.'
+          : error.isRetryable
+            ? 'Retrying re-sends the same request under the same idempotency key, so a close that did go through is replayed rather than repeated.'
+            : 'This request was refused before anything was recorded.'
+  return (
+    <div className="rounded-xl bg-down-soft px-3 py-2.5 text-[12.5px] text-down">
+      <p className="font-semibold">{error.message}</p>
+      <p className="mt-1 text-[11.5px] text-down/85">{detail}</p>
+    </div>
+  )
+}
+
+/**
+ * The two honest endings of an exit attempt.
+ *
+ * `NO_FILL` is a *successful* 201 that closed nothing: the position stays
+ * OPEN, the attempt is a durable row, and saying so is the whole point — "your
+ * close did not go through" is information the user needs.
+ */
+function ExitOutcome({ order, mark }: { order: Order; mark: number }) {
+  const filled = order.status === 'FILLED'
+  const platformError = filled && order.reportedToPlatform === false
+  // The model's fill price is not the number the user was looking at. Saying
+  // which is which is the difference between a fill and a claim.
+  const differsFromMark = order.price !== undefined && Math.abs(order.price - mark) >= 0.005
+
+  return (
+    <div className="space-y-3.5">
+      <div className="py-1 text-center">
+        <div
+          className={cn(
+            'liquid-inset mx-auto grid h-14 w-14 place-items-center rounded-full',
+            filled && 'border-up/25 bg-up-soft',
+          )}
+        >
+          {filled ? (
+            <CheckCircle2 size={30} className="text-up" strokeWidth={2.2} />
+          ) : (
+            <CircleSlash size={28} className="text-ink-muted" strokeWidth={2.2} />
+          )}
+        </div>
+        <h3 className="mt-3 text-[19px] font-extrabold tracking-[-0.02em] text-ink">
+          {filled ? 'Position closed' : 'No fill — still open'}
+        </h3>
+        <p className="mx-auto mt-1.5 max-w-[360px] text-[13px] leading-relaxed text-ink-soft">
+          {filled
+            ? 'The exit filled against the current quote and the trade is closed.'
+            : 'The exit was evaluated and did not fill. Your position is still open and unchanged — nothing was sold.'}
+        </p>
+      </div>
+
+      {order.replayed ? (
+        <Notice>
+          This close had already been recorded under the same key. The recorded outcome was replayed
+          — nothing was re-simulated and no second exit was attempted.
+        </Notice>
+      ) : null}
+
+      {platformError ? (
+        <div className="rounded-xl border border-[#f5c26b]/30 bg-[#f5c26b]/10 px-3 py-2.5 text-[12.5px] text-[#f5c26b]">
+          <p className="font-semibold">Closed, but the platform service was not updated.</p>
+          <p className="mt-1 leading-relaxed">
+            {order.platformError ?? 'The execution service could not report the close.'} The exit is
+            durable and reconciliation will pick it up. Do not close again.
+          </p>
+        </div>
+      ) : null}
+
+      <dl className="liquid-inset space-y-2.5 rounded-[18px] p-3.5 text-left">
+        {order.contractDetail ? <CloseRow label="Contract" value={order.contractDetail} /> : null}
+        <CloseRow label="Quantity" value={`${formatQty(order.quantity)} contracts`} />
+        {order.price === undefined ? null : (
+          <CloseRow label="Model fill price" value={formatMoney(order.price)} emphasis />
+        )}
+        {order.estimatedValue === undefined ? null : (
+          <CloseRow label="Proceeds" value={formatMoney(order.estimatedValue)} />
+        )}
+        {order.reasonCode ? <CloseRow label="Reason" value={order.reasonCode} /> : null}
+        {order.exitReason ? <CloseRow label="Exit reason" value={order.exitReason} /> : null}
+        {order.executionId ? <CloseRow label="Execution" value={order.executionId} /> : null}
+      </dl>
+
+      {filled && differsFromMark ? (
+        <p className="text-[11.5px] leading-relaxed text-ink-muted">
+          The fill price is the execution service's, computed from the quote it read at close time
+          through its fill model. It differs from the {formatMoney(mark)} mark shown a moment ago,
+          and the fill — not the mark — is what was recorded.
+        </p>
+      ) : null}
+
+      {!filled && order.sessionOnly ? (
+        <p className="text-[11.5px] leading-relaxed text-ink-muted">
+          The attempt is recorded by the execution service, but it opened and closed nothing, so no
+          row for it exists in the platform service's history (HKP-BKT-4). It is kept here for this
+          session only.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function Notice({ children, tone }: { children: React.ReactNode; tone?: 'brand' }) {
+  return (
+    <div
+      className={cn(
+        'liquid-inset flex items-start gap-2 rounded-[16px] px-3 py-3 text-[12.5px] leading-relaxed',
+        tone === 'brand' ? 'border-brand-400/15 text-[#cfe4ff]' : 'text-ink-soft',
+      )}
+    >
+      <Info size={15} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </div>
+  )
+}
+
+function SimulatedCloseTicket({
   position,
   price,
   previousClose,
@@ -248,7 +586,14 @@ export function ManualCloseTicket({
             <div className="flex items-center justify-between gap-3 border-t border-line pt-2.5">
               <dt className="text-[11.5px] text-ink-soft">Send to</dt>
               <dd>
-                <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+                {/* Demo book only: this ticket does not render in live mode,
+                    where positions sit in one paper portfolio with no
+                    brokerage to send to (HKP-PLT-6). */}
+                {position.brokerageId ? (
+                  <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+                ) : (
+                  <span className="text-[11.5px] font-semibold text-ink">Paper account</span>
+                )}
               </dd>
             </div>
           </dl>
@@ -336,18 +681,20 @@ function CloseRow({
 function CloseOrderSent({ order, unit }: { order: Order; unit: string }) {
   return (
     <div className="py-2 text-center">
-      <OrderRoutingAnimation brokerageId={order.brokerageId} />
+      {order.brokerageId ? <OrderRoutingAnimation brokerageId={order.brokerageId} /> : null}
       <h3 className="mt-4 text-[18px] font-extrabold tracking-[-0.02em] text-ink">
         Sent to your broker
       </h3>
       <p className="mx-auto mt-1.5 max-w-[330px] text-[12.5px] leading-relaxed text-ink-soft">
-        Sell {formatQty(order.quantity)} {unit} of {order.symbol} at approximately{' '}
-        {formatMoney(order.price)}.
+        Sell {formatQty(order.quantity)} {unit} of {order.symbol}
+        {order.price === undefined ? '' : ` at approximately ${formatMoney(order.price)}`}.
       </p>
       <dl className="liquid-inset mt-4 space-y-2.5 rounded-[18px] p-3.5 text-left">
         <CloseRow label="Order ID" value={order.id.toUpperCase()} />
         <CloseRow label="Status" value="Submitted · awaiting fill" />
-        <CloseRow label="Estimated credit" value={formatMoney(order.estimatedValue)} emphasis />
+        {order.estimatedValue === undefined ? null : (
+          <CloseRow label="Estimated credit" value={formatMoney(order.estimatedValue)} emphasis />
+        )}
       </dl>
     </div>
   )

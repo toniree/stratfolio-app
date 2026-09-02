@@ -10,7 +10,8 @@ import {
   formatSignedPercent,
 } from '@/lib/format'
 import type { PositionValuation } from '@/lib/portfolioMath'
-import type { PerformancePeriod, PerformancePoint } from '@/api/types'
+import { dayChangeOf, dayChangeSortKey } from '@/lib/dayChange'
+import type { PerformancePeriod, PerformanceSeries } from '@/api/types'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
@@ -56,6 +57,7 @@ export function MobilePositionsSummary({
   totalPlPct,
   dayPl,
   dayPlPct,
+  dayPlAvailable = true,
   cash,
   performance,
   period = 'ALL',
@@ -66,8 +68,11 @@ export function MobilePositionsSummary({
   totalPlPct: number
   dayPl: number
   dayPlPct: number
+  /** False when a holding in this set has no prior mark, making the sum
+   *  partial. A partial day P&L printed as a whole one is a lie of omission. */
+  dayPlAvailable?: boolean
   cash: number
-  performance?: PerformancePoint[]
+  performance?: PerformanceSeries
   period?: PerformancePeriod
   onPeriodChange?: (period: PerformancePeriod) => void
 }) {
@@ -114,15 +119,19 @@ export function MobilePositionsSummary({
       </div>
 
       <div className="liquid-inset mt-2.5 overflow-hidden rounded-[16px] pt-2 pb-1 pl-2">
-        {(performance?.length ?? 0) > 1 ? (
+        {performance && performance.points.length > 1 ? (
           <div>
             <PerformanceChart
-              points={performance ?? []}
+              series={performance}
               currentValue={marketValue}
               positive={positive}
               height={142}
               showAxes
             />
+            <p className="px-2 pb-1 text-[8.5px] font-semibold tracking-[0.04em] text-ink-muted uppercase">
+              {performance.label}
+              {performance.truncated ? ' · truncated at 500 trades' : ''}
+            </p>
           </div>
         ) : (
           <Skeleton className="mb-1.5 h-[136px] rounded-xl" />
@@ -139,8 +148,12 @@ export function MobilePositionsSummary({
         />
         <SummaryRow
           label="P/L Day"
-          value={`${formatSignedMoney(dayPl)}  ${formatSignedPercent(dayPlPct)}`}
-          tone={dayPl >= 0 ? 'up' : 'down'}
+          value={
+            dayPlAvailable
+              ? `${formatSignedMoney(dayPl)}  ${formatSignedPercent(dayPlPct)}`
+              : '—'
+          }
+          tone={dayPlAvailable ? (dayPl >= 0 ? 'up' : 'down') : undefined}
         />
       </dl>
     </section>
@@ -325,16 +338,20 @@ export function MobileHoldingsTable({
                             {position.symbol}
                           </span>
                           <span className="absolute top-[-2mm] left-[calc(100%+5mm)] z-10 inline-flex shrink-0 flex-col items-end gap-px">
-                            <RecommendationChip
-                              recommendation={position.ai.recommendation}
-                              className="shrink-0 px-0.5 py-px text-[5.5px]"
-                            />
-                            <AIConvictionBadge
-                              score={position.ai.conviction}
-                              delta={position.ai.convictionDelta}
-                              size="xs"
-                              className="h-[14.5px] gap-0 px-0.5 text-[7.25px] opacity-80"
-                            />
+                            {position.ai ? (
+                              <>
+                                <RecommendationChip
+                                  recommendation={position.ai.recommendation}
+                                  className="shrink-0 px-0.5 py-px text-[5.5px]"
+                                />
+                                <AIConvictionBadge
+                                  score={position.ai.conviction}
+                                  delta={position.ai.convictionDelta}
+                                  size="xs"
+                                  className="h-[14.5px] gap-0 px-0.5 text-[7.25px] opacity-80"
+                                />
+                              </>
+                            ) : null}
                           </span>
                         </div>
                         <div className="num mt-1 truncate text-[9.75px] font-medium text-[#f4f7fb]">
@@ -423,8 +440,8 @@ function MetricCell({
   valuation: PositionValuation
   className?: string
 }) {
-  const { position, marketValue, price, totalReturn, totalReturnPct, dayChangePct, costBasis } =
-    valuation
+  const { position, marketValue, price, totalReturn, totalReturnPct, costBasis } = valuation
+  const day = dayChangeOf(valuation)
   let value: string
   let detail: string | undefined
   let tone: 'up' | 'down' | undefined
@@ -458,8 +475,10 @@ function MetricCell({
       break
     }
     case 'dayPct':
-      value = formatSignedPercent(dayChangePct)
-      tone = dayChangePct >= 0 ? 'up' : 'down'
+      // "—" when the contract has no prior mark: a 0.00% here would claim the
+      // position is flat today rather than admit today is unmeasurable.
+      value = day.percent
+      tone = day.tone
       break
     case 'openPct':
       value = formatSignedPercent(totalReturnPct)
@@ -496,7 +515,9 @@ function compareMetric(a: PositionValuation, b: PositionValuation, metric: Posit
     pl: (item) => item.totalReturn,
     cost: (item) => item.costBasis,
     orderDate: (item) => new Date(item.position.openedAt).getTime(),
-    dayPct: (item) => item.dayChangePct,
+    // Unmeasured holdings sort to the bottom rather than in among the flat
+    // ones, which is what a 0 would do.
+    dayPct: dayChangeSortKey,
     openPct: (item) => item.totalReturnPct,
   }
   return values[metric](b) - values[metric](a)

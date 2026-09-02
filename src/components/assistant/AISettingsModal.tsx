@@ -6,8 +6,14 @@ import { blackScholes } from '@/lib/blackScholes'
 import { SYMBOL_MAP } from '@/api/mock/seededData'
 import { usePrice } from '@/store/priceStore'
 import { useTerminalStore } from '@/store/terminalStore'
-import { useUiStore } from '@/store/uiStore'
 import { useAiSettingsStore, type ApprovalMode, type TradingWindow } from '@/store/aiSettingsStore'
+import {
+  isConfigValueRejection,
+  isPolicyServerEnforced,
+  useAiTradingSwitch,
+  useExecutionPolicy,
+  useSetExecutionPolicy,
+} from '@/hooks/policyQueries'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 import { useRepromptStore } from '@/store/repromptStore'
 import { useOrderToastStore } from '@/store/orderToastStore'
@@ -38,8 +44,18 @@ export function AISettingsModal({
   const setCircuitBreakerPct = useAiSettingsStore((s) => s.setCircuitBreakerPct)
   const restoreDefaults = useAiSettingsStore((s) => s.restoreDefaults)
 
-  const aiTradingEnabled = useUiStore((s) => s.aiTradingEnabled)
-  const setAiTradingEnabled = useUiStore((s) => s.setAiTradingEnabled)
+  // The three execution settings that now have a backend home (§16). In live
+  // mode plt is the state and the enforcement; in mock mode these fall back to
+  // the same device-local store as everything else, and say so.
+  const aiTrading = useAiTradingSwitch()
+  const policy = useExecutionPolicy()
+  const setPolicy = useSetExecutionPolicy()
+  const enforced = isPolicyServerEnforced()
+
+  const serverApprovalMode = policy.data?.approvalMode
+  const serverTradingWindow = policy.data?.tradingWindow
+  const effectiveApprovalMode = enforced ? (serverApprovalMode ?? 'auto') : approvalMode
+  const effectiveTradingWindow = enforced ? (serverTradingWindow ?? 'extended') : tradingWindow
 
   return (
     <Modal
@@ -53,25 +69,46 @@ export function AISettingsModal({
 
         {/* ---------- execution ---------- */}
         <section className="space-y-2.5">
-          <SectionLabel>Execution</SectionLabel>
+          <SectionLabel>
+            Execution {enforced ? '· enforced by the platform' : '· this device only'}
+          </SectionLabel>
+
+          {enforced && policy.isError ? (
+            <p className="rounded-xl bg-down-soft px-3 py-2.5 text-[11px] font-semibold text-down">
+              The platform's execution policy could not be read, so these three controls show
+              nothing rather than a guess. What the servers enforce is unchanged.
+            </p>
+          ) : null}
+          {setPolicy.isError ? (
+            <p className="rounded-xl bg-down-soft px-3 py-2.5 text-[11px] font-semibold text-down">
+              {isConfigValueRejection(setPolicy.error)
+                ? 'The platform refused that value and kept the one it had. The control has snapped back to it.'
+                : 'That change was not saved. The control has snapped back to the platform’s value.'}
+            </p>
+          ) : null}
 
           <SettingRow
             title="AI Trading"
             detail={
-              aiTradingEnabled
-                ? 'The agent may execute approved plans automatically.'
-                : 'The agent drafts and monitors, but never executes.'
+              enforced
+                ? aiTrading.enabled
+                  ? 'The platform allows AI-initiated execution. Turning this off stops it server-side, not just here.'
+                  : 'The execution service refuses every AI-initiated entry while this is off. Exits are never blocked by it.'
+                : aiTrading.enabled
+                  ? 'The agent may execute approved plans automatically.'
+                  : 'The agent drafts and monitors, but never executes.'
             }
           >
             <button
               type="button"
               role="switch"
-              aria-checked={aiTradingEnabled}
-              aria-label={`AI Trading ${aiTradingEnabled ? 'on' : 'off'}`}
-              onClick={() => setAiTradingEnabled(!aiTradingEnabled)}
+              aria-checked={aiTrading.enabled}
+              aria-label={`AI Trading ${aiTrading.enabled ? 'on' : 'off'}`}
+              disabled={aiTrading.pending}
+              onClick={() => aiTrading.setEnabled(!aiTrading.enabled)}
               className={cn(
                 'relative h-6 w-11 shrink-0 rounded-full transition-colors',
-                aiTradingEnabled
+                aiTrading.enabled
                   ? 'bg-emerald-400/35 shadow-[0_0_10px_rgba(47,255,163,0.25)]'
                   : 'bg-line-strong',
               )}
@@ -79,7 +116,7 @@ export function AISettingsModal({
               <span
                 className={cn(
                   'absolute top-1 h-4 w-4 rounded-full transition-[left,background-color] duration-200',
-                  aiTradingEnabled
+                  aiTrading.enabled
                     ? 'left-6 bg-[#42dda0] shadow-[0_0_8px_rgba(47,255,163,0.6)]'
                     : 'left-1 bg-white',
                 )}
@@ -90,14 +127,28 @@ export function AISettingsModal({
           <SettingRow
             title="Order approval"
             detail={
-              approvalMode === 'approve'
-                ? 'Every AI order waits for your tap.'
-                : 'Plans you have approved fire the moment criteria are met.'
+              /* Server-enforced as of AI-021: `approve_each` halts the decision
+                 cycle at AWAITING_APPROVAL before any execution call, and the
+                 cycle can never auto-execute in that mode. The approval action
+                 itself is still a new submission through the normal path
+                 (HKP-AI-3a), and no autonomous entry loop exists either way
+                 (HKP-XSV-1) — so neither branch may promise one. */
+              enforced
+                ? effectiveApprovalMode === 'approve'
+                  ? 'The decision engine stops before executing and records that it is awaiting your approval.'
+                  : 'A validated plan may execute without a second confirmation.'
+                : effectiveApprovalMode === 'approve'
+                  ? 'Every AI order waits for your tap. Saved on this device only.'
+                  : 'Approved plans skip the confirmation step. Saved on this device only.'
             }
           >
             <Segmented
-              value={approvalMode}
-              onChange={(v) => setApprovalMode(v as ApprovalMode)}
+              value={effectiveApprovalMode}
+              onChange={(v) =>
+                enforced
+                  ? setPolicy.mutate({ approvalMode: v as ApprovalMode })
+                  : setApprovalMode(v as ApprovalMode)
+              }
               options={[
                 { value: 'approve', label: 'Ask me' },
                 { value: 'auto', label: 'Auto' },
@@ -105,7 +156,16 @@ export function AISettingsModal({
             />
           </SettingRow>
 
-          <SettingRow title="Max size per AI trade" detail="Ceiling per position, as % of buying power.">
+          <SettingRow
+            title="Max size per AI trade"
+            // The platform already enforces its own
+            // `policy.max_portfolio_allocation_pct` cap in PolicyGate. This
+            // slider is NOT wired to it: the two are not known to share
+            // semantics (per position vs per portfolio), and writing one into
+            // the other would quietly re-scale a cap that governs real
+            // execution. It stays local and labelled until that is settled.
+            detail="Ceiling per position, as % of buying power. Saved on this device only — the platform enforces its own allocation cap."
+          >
             <Segmented
               value={String(maxAllocationPct)}
               onChange={(v) => setMaxAllocationPct(Number(v))}
@@ -118,10 +178,23 @@ export function AISettingsModal({
             />
           </SettingRow>
 
-          <SettingRow title="Trading window" detail="When the agent is allowed to route orders.">
+          <SettingRow
+            title="Trading window"
+            detail={
+              enforced
+                ? effectiveTradingWindow === 'rth'
+                  ? 'The decision engine halts outside the regular session, on the market data service’s own session state.'
+                  : 'No session restriction on AI-initiated execution.'
+                : 'When the agent is allowed to route orders. Saved on this device only.'
+            }
+          >
             <Segmented
-              value={tradingWindow}
-              onChange={(v) => setTradingWindow(v as TradingWindow)}
+              value={effectiveTradingWindow}
+              onChange={(v) =>
+                enforced
+                  ? setPolicy.mutate({ tradingWindow: v as TradingWindow })
+                  : setTradingWindow(v as TradingWindow)
+              }
               options={[
                 { value: 'rth', label: 'Market hrs' },
                 { value: 'extended', label: 'Extended' },
@@ -131,7 +204,10 @@ export function AISettingsModal({
 
           <SettingRow
             title="Daily circuit breaker"
-            detail="Past this portfolio day-loss the agent stands down and alerts you."
+            // Explicitly deferred backend-side (§16.3): nothing can trip this
+            // until a server-side day-P&L measurement surface exists, and no
+            // config key is reserved for it. Local, and honest about it.
+            detail="Past this portfolio day-loss the agent stands down and alerts you. Saved on this device only — nothing measures day P&L server-side yet."
             icon={<ShieldAlert size={13} className="text-[#f5c26b]" />}
           >
             <Segmented
@@ -144,6 +220,14 @@ export function AISettingsModal({
               ]}
             />
           </SettingRow>
+
+          {enforced && (policy.data?.unsetKeys.length || policy.data?.invalidKeys.length) ? (
+            <p className="px-1 text-[9.5px] leading-relaxed text-ink-muted">
+              {policy.data.invalidKeys.length > 0
+                ? `Stored values the platform could not parse (${policy.data.invalidKeys.join(', ')}) resolve to the most restrictive setting, which is what the servers act on.`
+                : 'Some of these have never been set on the platform, so its defaults apply — the same behaviour as before they existed.'}
+            </p>
+          ) : null}
         </section>
 
         {/* ---------- memory ---------- */}
@@ -168,7 +252,9 @@ export function AISettingsModal({
         </section>
 
         <p className="px-1 text-[9.5px] leading-relaxed text-ink-muted">
-          Settings steer the simulated agent in this demo. Nothing here places real orders.
+          {enforced
+            ? 'Execution settings are stored and enforced by the platform. Everything else on this screen is saved on this device. Trading is silent/paper — nothing here places a real brokerage order.'
+            : 'Settings steer the simulated agent in this demo. Nothing here places real orders.'}
         </p>
       </div>
     </Modal>

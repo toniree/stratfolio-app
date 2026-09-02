@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useUiStore } from '@/store/uiStore'
 import { useThesisDecisionStore } from '@/store/thesisDecisionStore'
-import { usePrices } from '@/store/priceStore'
+import { usePrices, useTrackedSymbols } from '@/store/priceStore'
 import {
-  useIdeas,
+  useTheses,
   useActivity,
   usePerformance,
   usePlannerIdeas,
@@ -12,7 +12,11 @@ import {
   usePortfolioOutlook,
   usePositions,
 } from '@/hooks/queries'
+import { useOptionMarks } from '@/hooks/marketQueries'
 import { computeTotals } from '@/lib/portfolioMath'
+import { hasLiveDomain } from '@/api/http/env'
+import { ProvenanceTag } from '@/components/shared/ProvenanceTag'
+import { formatMoney } from '@/lib/format'
 import type { PerformancePeriod } from '@/api/types'
 import { PeriodSelector } from '@/components/portfolio/PeriodSelector'
 import { PerformanceChart } from '@/components/charts/PerformanceChart'
@@ -27,6 +31,7 @@ import { HoldingsTable } from '@/components/positions/HoldingsTable'
 import { Carousel, CarouselItem } from '@/components/shared/Carousel'
 import { PositionTile } from '@/components/positions/PositionTile'
 import { RecTile } from '@/components/thesis/RecTile'
+import { ThesisCard } from '@/components/thesis/ThesisCard'
 import { UpcomingTradePlans } from '@/components/plan/UpcomingTradePlans'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { formatSignedMoney, formatSignedPercent } from '@/lib/format'
@@ -51,16 +56,28 @@ export function PortfolioPage() {
   const { data: outlook, isLoading: outlookLoading, refetch: refetchOutlook } =
     usePortfolioOutlook(accountId)
   const { data: performance } = usePerformance(accountId, period)
-  const { data: ideas, isLoading: ideasLoading } = useIdeas()
+  const { data: theses, isLoading: thesesLoading } = useTheses()
   const { data: plannerIdeas, isLoading: plannerLoading } = usePlannerIdeas()
   const { data: activity } = useActivity()
   const thesisDecisions = useThesisDecisionStore((s) => s.decisions)
 
-  const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  // Real chain marks for the open book (APP-108). `{}` in mock mode, which
+  // leaves the deterministic demo option model untouched.
+  const { marks } = useOptionMarks(positions)
+  // The tape should carry the symbols actually held, not just the default set.
+  useTrackedSymbols(useMemo(() => (positions ?? []).map((p) => p.symbol), [positions]))
+
+  const totals = useMemo(
+    () => computeTotals(positions ?? [], prices, marks),
+    [positions, prices, marks],
+  )
+  const allSimulated = !hasLiveDomain()
 
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
     for (const p of positions ?? []) {
+      // Live positions carry no brokerage (one paper portfolio, HKP-PLT-6).
+      if (!p.brokerageId) continue
       result[p.brokerageId] = (result[p.brokerageId] ?? 0) + 1
     }
     return result
@@ -86,7 +103,7 @@ export function PortfolioPage() {
     return ordered
   }, [visible])
 
-  const periodStartMultiplier = performance?.[0]?.multiplier ?? 1
+  const periodStartMultiplier = performance?.points[0]?.multiplier ?? 1
   const periodStartValue = totals.marketValue * periodStartMultiplier
   const periodReturn = period === '1D' ? totals.dayPl : totals.marketValue - periodStartValue
   const periodReturnPct =
@@ -101,8 +118,8 @@ export function PortfolioPage() {
     totals.valuations.slice().sort((a, b) => b.marketValue - a.marketValue)[0]?.history ?? []
 
   const topRecs = useMemo(
-    () => (ideas ?? []).filter((idea) => !thesisDecisions[idea.id]).slice(0, 10),
-    [ideas, thesisDecisions],
+    () => (theses ?? []).filter((thesis) => !thesisDecisions[thesis.id]).slice(0, 10),
+    [theses, thesisDecisions],
   )
 
   const metricsStrip = (
@@ -115,6 +132,7 @@ export function PortfolioPage() {
           marketValue={totals.marketValue}
           dayPl={totals.dayPl}
           dayPlPct={totals.dayPlPct}
+          dayPlAvailable={totals.dayPlAvailable}
           spark={heroSpark}
           expanded={chartOpen}
           onToggle={() => setChartOpen((v) => !v)}
@@ -130,25 +148,70 @@ export function PortfolioPage() {
           <div className="text-[11px] font-bold tracking-[0.08em] text-ink-muted uppercase">
             Performance
           </div>
-          <div
-            className={`num mt-1 text-[15px] font-bold ${positive ? 'text-up' : 'text-down'}`}
-          >
-            {formatSignedMoney(periodReturn)} ({formatSignedPercent(periodReturnPct)}){' '}
-            <span className="font-medium text-ink-muted">
-              {period === '1D' ? 'today' : `over ${period}`}
-            </span>
-          </div>
+          {period === '1D' && !totals.dayPlAvailable ? (
+            // At least one holding has a current mark and no prior one — the
+            // V1 facade exposes no historical chain — so a day figure would be
+            // a partial sum wearing a whole number's clothes.
+            <div className="num mt-1 text-[15px] font-bold text-ink-muted">
+              — <span className="text-[11px] font-medium">today · no prior mark for every holding</span>
+            </div>
+          ) : (
+            <div
+              className={`num mt-1 text-[15px] font-bold ${positive ? 'text-up' : 'text-down'}`}
+            >
+              {formatSignedMoney(periodReturn)} ({formatSignedPercent(periodReturnPct)}){' '}
+              <span className="font-medium text-ink-muted">
+                {period === '1D' ? 'today' : `over ${period}`}
+              </span>
+            </div>
+          )}
         </div>
         <PeriodSelector value={period} onChange={setPeriod} positive={positive} />
       </div>
       <div className="mt-3">
         {performance && totals.marketValue > 0 ? (
-          <PerformanceChart
-            points={performance}
-            currentValue={totals.marketValue}
-            positive={positive}
-            height={260}
-          />
+          <>
+            <PerformanceChart
+              series={performance}
+              currentValue={totals.marketValue}
+              positive={positive}
+              height={260}
+            />
+            {/* The chart says what it is drawing. A settled-equity curve is
+                realised P&L from closed trades, not the marked book. */}
+            <p className="mt-1.5 text-center text-[10.5px] text-ink-muted">
+              {performance.label}
+              {performance.truncated
+                ? ' · older history is missing (plt caps lists at 500 rows)'
+                : ''}
+            </p>
+
+            {/* ---------- current marked NAV: a separate stat, never a point
+                on the line above (plan §3.1, "one equity basis per chart").
+                The curve is realised P&L accumulated at each close; this is
+                the book marked right now. Adding one to the other, or scaling
+                the curve by it, double-counts. ---------- */}
+            {performance.basis === 'settled-equity' ? (
+              <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-xl border border-line bg-white/[0.03] px-3 py-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold tracking-[0.07em] text-ink-muted uppercase">
+                    Current marked value
+                  </span>
+                  <ProvenanceTag
+                    provenance={totals.fullyMarked ? totals.provenance : 'synthetic'}
+                  />
+                </div>
+                <span className="num text-[14px] font-extrabold text-ink">
+                  {formatMoney(totals.marketValue + (meta?.cash ?? 0))}
+                </span>
+                <p className="w-full text-[9.5px] leading-snug text-ink-muted">
+                  {totals.fullyMarked
+                    ? 'Open positions at the latest chain marks, plus cash. A different basis from the settled curve above — deliberately not drawn on it.'
+                    : 'Some holdings have no server mark and are held at their entry price, so this total is an estimate — not a quote. Different basis from the settled curve above.'}
+                </p>
+              </div>
+            ) : null}
+          </>
         ) : (
           <Skeleton className="h-[260px] rounded-2xl" />
         )}
@@ -211,13 +274,20 @@ export function PortfolioPage() {
                 See all
               </Link>
             </div>
-            {ideasLoading ? (
+            {thesesLoading ? (
               <Skeleton className="h-[268px] rounded-[18px]" />
             ) : (
               <div className="space-y-3">
-                {topRecs.slice(0, 3).map((idea) => (
-                  <RecTile key={idea.id} idea={idea} />
-                ))}
+                {topRecs.slice(0, 3).map((thesis) =>
+                  // Branching on the data, not the mode: a live thesis has no
+                  // entry band, target band or recommendation for RecTile to
+                  // render, so it renders as the thesis plt recorded.
+                  thesis.idea ? (
+                    <RecTile key={thesis.id} thesis={thesis} idea={thesis.idea} />
+                  ) : (
+                    <ThesisCard key={thesis.id} thesis={thesis} />
+                  ),
+                )}
               </div>
             )}
           </section>
@@ -265,18 +335,22 @@ export function PortfolioPage() {
           titleClassName="text-[10px] font-extrabold tracking-[0.075em] text-ink-soft uppercase sm:text-[10px]"
           subtitle={<ThesisResearchTicker />}
           seeAllTo="/app/thesis"
-          itemCount={ideasLoading ? 3 : topRecs.length}
+          itemCount={thesesLoading ? 3 : topRecs.length}
           empty={<EmptyRow title="No new theses right now" />}
         >
-          {ideasLoading
+          {thesesLoading
             ? Array.from({ length: 3 }).map((_, i) => (
                 <CarouselItem key={i}>
                   <Skeleton className="h-[268px] rounded-[18px]" />
                 </CarouselItem>
               ))
-            : topRecs.map((idea) => (
-                <CarouselItem key={idea.id}>
-                  <RecTile idea={idea} />
+            : topRecs.map((thesis) => (
+                <CarouselItem key={thesis.id}>
+                  {thesis.idea ? (
+                    <RecTile thesis={thesis} idea={thesis.idea} />
+                  ) : (
+                    <ThesisCard thesis={thesis} />
+                  )}
                 </CarouselItem>
               ))}
         </Carousel>
@@ -291,12 +365,26 @@ export function PortfolioPage() {
         />
       </div>
 
-      <p className="pt-1 pb-2 text-center text-[10.9px] text-[#5b6673]">
-        Every price, position and AI output in this build is simulated.{' '}
-        <Link to="/app/profile" className="font-semibold text-brand-300/70">
-          About this demo
-        </Link>
-      </p>
+      {/* D10: the blanket "everything is simulated" claim is false the moment
+          any domain goes live — it would mislabel a real plt portfolio as
+          simulated and let the still-mocked panels hide behind it. Provenance
+          now lives on the panels (`ProvenanceTag`); this line survives only
+          for a fully mocked build. */}
+      {allSimulated ? (
+        <p className="pt-1 pb-2 text-center text-[10.9px] text-[#5b6673]">
+          Every price, position and AI output in this build is simulated.{' '}
+          <Link to="/app/profile" className="font-semibold text-brand-300/70">
+            About this demo
+          </Link>
+        </p>
+      ) : (
+        <p className="pt-1 pb-2 text-center text-[10.9px] text-[#5b6673]">
+          Some panels are live and some are simulated — each says which.{' '}
+          <Link to="/app/profile" className="font-semibold text-brand-300/70">
+            About this build
+          </Link>
+        </p>
+      )}
     </div>
   )
 }

@@ -5,13 +5,29 @@ import { cn } from '@/lib/cn'
 import { blackScholes } from '@/lib/blackScholes'
 import { chainImpliedVol } from '@/lib/terminalSeries'
 import { useTerminalStore } from '@/store/terminalStore'
+import { isMarketLive, useLiveChain, useMarketSnapshot } from '@/hooks/marketQueries'
+import { TRUNCATED_CHAIN_NOTE } from '@/api/http/adapters/market'
+import { ProvenanceTag } from '@/components/shared/ProvenanceTag'
+import type { OptionChainPage } from '@/api/marketData/types'
 
 /**
  * Compact options chain for the terminal chart's right gutter: one expiry at a
- * time (15 to pick from), 15 strikes centred on spot, calls' bid/ask on the
- * left of the strike ladder and puts' on the right. Everything is priced with
- * the app's Black–Scholes module off the live quote, with a volatility smile
- * seeded per symbol so the surface holds still while the mids tick.
+ * time, ~15 strikes centred on spot, calls' bid/ask left of the strike ladder
+ * and puts' right.
+ *
+ * TWO SOURCES, NEVER BLENDED (APP-108).
+ *
+ * - **Live**: every strike, expiration, bid and ask is the mnd chain's own.
+ *   The expiration list comes from the snapshot's `chain_summary`, which mnd
+ *   computes over the *whole* chain, and the ladder comes from one
+ *   expiration-filtered page — never an unfiltered pull, which for SPY or QQQ
+ *   is ~7,300 contracts and comes back truncated.
+ * - **Mock**: the deterministic Black–Scholes surface below, with a seeded
+ *   volatility smile. It is a demo prop and is labelled "Simulated".
+ *
+ * The synthesised surface is *not* available in live mode. Manufacturing a
+ * strike ladder and a smile in the browser and rendering it beside real
+ * positions is the fabrication plan §6 removes.
  */
 
 const STRIKE_ROWS = 15
@@ -19,9 +35,44 @@ const EXPIRY_COUNT = 15
 
 interface Expiry {
   date: Date
+  /** `YYYY-MM-DD` — what the chain route's `expiration` filter takes. */
+  iso: string
   label: string
   dte: number
   years: number
+}
+
+function isoDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function expiryLabelOf(date: Date): string {
+  return date
+    .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+    .replace(', ', " '")
+}
+
+/**
+ * The expirations mnd actually serves, from the snapshot's whole-chain
+ * summary. Nothing is synthesised: an expiration the dataset does not carry
+ * never appears in the picker, so a user cannot select a chain that does not
+ * exist.
+ */
+function liveExpiries(dates: readonly string[], now: Date): Expiry[] {
+  const nowMs = now.getTime()
+  return dates
+    .map((iso) => {
+      // The wire form is a calendar date; parsed as UTC midnight, matching
+      // every other expiry in the app.
+      const date = new Date(`${iso}T00:00:00Z`)
+      const dte = Math.max(0, Math.round((date.getTime() - nowMs) / 86_400_000))
+      return { date, iso, dte, years: Math.max(dte / 365, 1 / 365), label: expiryLabelOf(date) }
+    })
+    .filter((expiry) => Number.isFinite(expiry.date.getTime()))
+    // V1 is long single-leg with DTE >= 1; a same-day expiry is not tradeable
+    // under the product invariant, so it is not offered.
+    .filter((expiry) => expiry.dte >= 1)
+    .sort((a, b) => a.dte - b.dte)
 }
 
 /** Next 8 weekly Fridays, then monthly (third-Friday) expiries after those. */
@@ -49,9 +100,10 @@ function buildExpiries(now: Date): Expiry[] {
     const dte = Math.max(1, Math.round((date.getTime() - now.getTime()) / 86_400_000))
     return {
       date,
+      iso: isoDate(date),
       dte,
       years: Math.max(dte / 365, 1 / 365),
-      label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }).replace(', ', " '"),
+      label: expiryLabelOf(date),
     }
   })
 }
@@ -82,17 +134,56 @@ function buildStrikes(spot: number): number[] {
 const impliedVol = chainImpliedVol
 
 interface QuotePair {
-  bid: number
-  ask: number
+  bid?: number
+  ask?: number
 }
 
-function quoteFor(mid: number, spot: number): QuotePair {
+interface ChainRow {
+  strike: number
+  call: QuotePair
+  put: QuotePair
+}
+
+/** The demo model always produces both sides, so it keeps a stricter type
+ *  than the wire's `QuotePair` (which it satisfies). */
+function quoteFor(mid: number, spot: number): { bid: number; ask: number } {
   const spread = Math.max(0.02, mid * 0.028 + spot * 0.0002)
   const bid = Math.max(0, mid - spread / 2)
   return { bid, ask: bid + spread }
 }
 
-const money = (v: number) => (v >= 1000 ? v.toFixed(0) : v.toFixed(2))
+/** A side the server did not quote renders as a gap, never as 0.00. */
+const money = (v: number | undefined) =>
+  v === undefined ? '—' : v >= 1000 ? v.toFixed(0) : v.toFixed(2)
+
+/**
+ * A real chain page → the strike ladder, centred on spot.
+ *
+ * Only strikes the server sent appear. The window is trimmed around spot for
+ * the gutter's height; that is a view decision, not a data one — the untrimmed
+ * page is still the source of every number in it.
+ */
+function liveRows(page: OptionChainPage | undefined, spot: number | undefined): ChainRow[] {
+  if (!page) return []
+  const byStrike = new Map<number, ChainRow>()
+  for (const contract of page.contracts) {
+    const row = byStrike.get(contract.strike) ?? { strike: contract.strike, call: {}, put: {} }
+    const side = { bid: contract.bid, ask: contract.ask }
+    if (contract.right === 'CALL') row.call = side
+    else row.put = side
+    byStrike.set(contract.strike, row)
+  }
+  const rows = [...byStrike.values()].sort((a, b) => a.strike - b.strike)
+  if (spot === undefined || rows.length <= STRIKE_ROWS) return rows
+
+  let centre = 0
+  for (let i = 1; i < rows.length; i++) {
+    if (Math.abs(rows[i].strike - spot) < Math.abs(rows[centre].strike - spot)) centre = i
+  }
+  const half = Math.floor(STRIKE_ROWS / 2)
+  const start = Math.max(0, Math.min(centre - half, rows.length - STRIKE_ROWS))
+  return rows.slice(start, start + STRIKE_ROWS)
+}
 
 type Right = 'CALL' | 'PUT'
 
@@ -280,12 +371,31 @@ export function OptionsChain({
   spot: number | undefined
   className?: string
 }) {
-  const expiries = useMemo(() => buildExpiries(new Date()), [])
-  const [expiryIndex, setExpiryIndex] = useState(2)
-  const expiry = expiries[expiryIndex]
+  const live = isMarketLive()
+  // The whole-chain roll-up is the only correct source of the expiration list:
+  // mnd computes it over the complete chain, so it is right even when a chain
+  // page is truncated (§15.4).
+  const { data: snapshot } = useMarketSnapshot(symbol, { enabled: live })
+  const liveExpirations = snapshot?.chainSummary?.expirations
 
-  const rows = useMemo(() => {
-    if (!spot) return []
+  const expiries = useMemo(
+    () => (live ? liveExpiries(liveExpirations ?? [], new Date()) : buildExpiries(new Date())),
+    [live, liveExpirations],
+  )
+  const [expiryIndex, setExpiryIndex] = useState(2)
+  // A live expiration list is whatever the dataset holds; the stored index may
+  // point past its end.
+  const safeIndex = expiries.length === 0 ? -1 : Math.min(expiryIndex, expiries.length - 1)
+  const expiry = safeIndex >= 0 ? expiries[safeIndex] : undefined
+
+  const chain = useLiveChain(symbol, {
+    expiration: expiry?.iso,
+    enabled: live && expiry !== undefined,
+  })
+
+  const rows = useMemo<ChainRow[]>(() => {
+    if (live) return liveRows(chain.data, spot)
+    if (!spot || !expiry) return []
     return buildStrikes(spot).map((strike) => {
       const volatility = impliedVol(symbol, spot, strike, expiry.years)
       const call = blackScholes({ spot, strike, years: expiry.years, volatility, right: 'CALL' })
@@ -296,7 +406,7 @@ export function OptionsChain({
         put: quoteFor(put.price, spot),
       }
     })
-  }, [symbol, spot, expiry])
+  }, [live, chain.data, symbol, spot, expiry])
 
   const atmIndex = useMemo(() => {
     if (!spot || rows.length === 0) return -1
@@ -310,7 +420,8 @@ export function OptionsChain({
   const contract = useTerminalStore((s) => s.contract)
   const setContract = useTerminalStore((s) => s.setContract)
   const picked = contract ? { strike: contract.strike, right: contract.right } : null
-  const pick = (strike: number, right: Right) =>
+  const pick = (strike: number, right: Right) => {
+    if (!expiry) return
     setContract({
       strike,
       right,
@@ -318,6 +429,7 @@ export function OptionsChain({
       expiryTime: Math.floor(expiry.date.getTime() / 1000),
       dte: expiry.dte,
     })
+  }
   const [question, setQuestion] = useState('')
   const [analysis, setAnalysis] = useState<ContractAnalysis | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
@@ -342,7 +454,11 @@ export function OptionsChain({
   const ask = (event: React.FormEvent) => {
     event.preventDefault()
     const q = question.trim()
-    if (!q || !spot || !selected || thinking) return
+    // The desk analysis below is priced entirely by the in-browser
+    // Black–Scholes model on a seeded smile. That is a demo prop, not a read on
+    // a real contract, so it does not run in live mode at all (§6; the
+    // assistant domain is blocked on HKP-AI-2 regardless).
+    if (live || !q || !spot || !selected || !expiry || thinking) return
     setQuestion('')
     setPanelOpen(true)
     setThinking(true)
@@ -360,13 +476,24 @@ export function OptionsChain({
         <span className="text-[9px] font-extrabold tracking-[0.09em] text-ink-muted uppercase">
           Chain
         </span>
-        <ExpiryPicker
-          expiries={expiries}
-          value={expiryIndex}
-          onChange={setExpiryIndex}
-          className="ml-auto"
-        />
+        <ProvenanceTag provenance={live ? chain.data?.provenance : 'mock'} />
+        {expiry ? (
+          <ExpiryPicker
+            expiries={expiries}
+            value={safeIndex}
+            onChange={setExpiryIndex}
+            className="ml-auto"
+          />
+        ) : null}
       </div>
+
+      {/* A truncated page is a page of contracts, not a chain (§15.4): no
+          chain-wide number may be read off it, so the ladder says so. */}
+      {live && chain.data?.truncated ? (
+        <p className="border-b border-line px-2.5 py-1 text-[8.5px] leading-snug text-[#f5c26b]">
+          {TRUNCATED_CHAIN_NOTE}
+        </p>
+      ) : null}
 
       {/* ---------- column headers ---------- */}
       <div className="grid grid-cols-[1fr_1fr_minmax(44px,0.9fr)_1fr_1fr] items-center gap-x-1 border-b border-line px-2.5 pt-1.5 pb-1 text-center">
@@ -449,7 +576,15 @@ export function OptionsChain({
             )
           })}
           {rows.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[10px] text-ink-muted">Waiting for quote…</p>
+            <p className="px-3 py-6 text-center text-[10px] text-ink-muted">
+              {!live
+                ? 'Waiting for quote…'
+                : chain.isFetching || !expiry
+                  ? 'Loading chain…'
+                  : chain.isError
+                    ? 'Chain unavailable from the market service.'
+                    : `No chain for ${symbol} in this dataset.`}
+            </p>
           ) : null}
         </div>
 
@@ -470,7 +605,9 @@ export function OptionsChain({
                 <Sparkles size={11} className="shrink-0 text-brand-300" />
                 <span className="num min-w-0 truncate text-[10px] font-extrabold text-ink">
                   {analysis?.label ??
-                    (selected ? `${symbol} $${selected.strike}${selected.right === 'CALL' ? 'C' : 'P'} · ${expiry.label}` : '')}
+                    (selected && expiry
+                      ? `${symbol} $${selected.strike}${selected.right === 'CALL' ? 'C' : 'P'} · ${expiry.label}`
+                      : '')}
                 </span>
                 <button
                   type="button"
@@ -537,7 +674,21 @@ export function OptionsChain({
         </AnimatePresence>
       </div>
 
-      {/* ---------- ask-AI dock ---------- */}
+      {/* ---------- ask-AI dock ----------
+          Mock only. The analysis it produces is the in-browser Black–Scholes
+          model on a seeded smile, and no browser-reachable AI chat exists at
+          all (HKP-AI-2) — so in live mode the dock is replaced by the chain's
+          own real footer rather than an input that would answer with a
+          simulation. */}
+      {live ? (
+        <p className="num truncate border-t border-line px-2.5 py-1.5 text-[8px] text-ink-muted/75">
+          {selected && expiry
+            ? `On ${symbol} $${selected.strike % 1 === 0 ? selected.strike : selected.strike.toFixed(1)}${selected.right === 'CALL' ? 'C' : 'P'} · ${expiry.label} — tap a bid/ask to switch`
+            : chain.data
+              ? `${chain.data.contractCount} of ${chain.data.totalContractCount} contracts`
+              : 'Live chain'}
+        </p>
+      ) : (
       <form onSubmit={ask} className="border-t border-line px-2 py-1.5">
         <div className="flex items-center gap-1">
           {analysis && !panelOpen ? (
@@ -571,11 +722,12 @@ export function OptionsChain({
           </button>
         </div>
         <p className="num mt-1 truncate px-0.5 text-[8px] text-ink-muted/75">
-          {selected
+          {selected && expiry
             ? `On ${symbol} $${selected.strike % 1 === 0 ? selected.strike : selected.strike.toFixed(1)}${selected.right === 'CALL' ? 'C' : 'P'} · ${expiry.label} — tap a bid/ask to switch`
-            : 'Simulated chain · quotes track the live price'}
+            : 'Simulated chain · quotes track the simulated price'}
         </p>
       </form>
+      )}
     </aside>
   )
 }

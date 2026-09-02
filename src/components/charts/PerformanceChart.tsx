@@ -8,11 +8,17 @@ import {
   type ISeriesApi,
   type UTCTimestamp,
 } from 'lightweight-charts'
-import type { PerformancePoint } from '@/api/types'
+import type { PerformanceSeries } from '@/api/types'
 
 interface PerformanceChartProps {
-  points: PerformancePoint[]
-  /** Live portfolio value; the series is scaled so its last point equals this. */
+  series: PerformanceSeries
+  /**
+   * Live portfolio value. Used **only** to scale a `relative-multiplier`
+   * series. A `settled-equity` series already carries absolute dollars and is
+   * never multiplied by this — doing so would blend realised P&L with the
+   * live marked book and double-count (plan §3.1, "one equity basis per
+   * chart").
+   */
   currentValue: number
   positive: boolean
   height?: number
@@ -26,12 +32,15 @@ const PINK_LINE = '#f3a6b5'
 /**
  * Wraps TradingView Lightweight Charts.
  *
- * The API returns multipliers relative to "now" rather than absolute dollars,
- * so the chart is rescaled against the live portfolio value on every tick.
- * That keeps the chart's right edge and the hero number in permanent agreement.
+ * Two bases, never mixed. A `relative-multiplier` series (the demo book) is
+ * rescaled against the live portfolio value on every tick, which keeps the
+ * chart's right edge and the hero number in permanent agreement. A
+ * `settled-equity` series (plt closed trades) is already in dollars and is
+ * plotted as-is; the live marked value belongs beside it as a separate stat,
+ * not folded into the line.
  */
 export function PerformanceChart({
-  points,
+  series: performance,
   currentValue,
   positive,
   height = 208,
@@ -168,16 +177,19 @@ export function PerformanceChart({
   useEffect(() => {
     const series = seriesRef.current
     const chart = chartRef.current
-    if (!series || !chart || points.length === 0 || currentValue <= 0) return
+    const points = performance.points
+    const relative = performance.basis === 'relative-multiplier'
+    if (!series || !chart || points.length === 0) return
+    if (relative && currentValue <= 0) return
 
     const data = points.map((p) => ({
       time: p.time as UTCTimestamp,
-      value: Number((p.multiplier * currentValue).toFixed(2)),
+      value: Number((relative ? p.multiplier * currentValue : (p.value ?? 0)).toFixed(2)),
     }))
     series.applyOptions({ baseValue: { type: 'price', price: data[0].value } })
     series.setData(data)
     chart.timeScale().fitContent()
-  }, [points, currentValue])
+  }, [performance, currentValue])
 
   const revealPoint = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!showAxes) return

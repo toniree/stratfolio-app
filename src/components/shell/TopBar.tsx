@@ -4,7 +4,10 @@ import { Link } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 import { formatSignedPercent } from '@/lib/format'
 import { computeTotals } from '@/lib/portfolioMath'
-import { usePrices } from '@/store/priceStore'
+import { usePrices, useTrackedSymbols } from '@/store/priceStore'
+import { marketSymbols } from '@/api/http/env'
+import { useOptionMarks } from '@/hooks/marketQueries'
+import { ProvenanceTag, StaleTag } from '@/components/shared/ProvenanceTag'
 import { useAuthStore } from '@/store/authStore'
 import { useUiStore } from '@/store/uiStore'
 import { usePortfolioMeta, usePositions } from '@/hooks/queries'
@@ -15,15 +18,29 @@ import { MobilePortfolioSummary } from '@/components/shell/MobilePortfolioSummar
 import { MobileMarketTicker } from '@/components/portfolio/MobileMarketTicker'
 import { HeaderOrders } from '@/components/shell/HeaderOrders'
 
-/** Index levels are derived from SPY so the strip never contradicts the tape. */
-const INDICES = [
-  { label: 'SPY', base: 592.11, factor: 1 },
-  { label: 'DOW', base: 39742.42, factor: 0.42 },
-]
+/** How many tiles the strip has room for. */
+const STRIP_TILES = 3
 
+/**
+ * The strip shows the head of the configured market symbol list — the tickers
+ * the bound data source is actually being asked for — and only those of them
+ * it serves.
+ *
+ * It deliberately keeps no list of its own. A second hardcoded set would drift
+ * from the dataset (the Wave B0 proof pass found `synthetic-v1` serving SPY,
+ * AAPL and MSFT while this strip asked for QQQ and IWM, spending a poll every
+ * five seconds on two guaranteed 404s).
+ *
+ * This replaces a DOW tile whose level was manufactured from SPY's day change
+ * times 0.42 (§6, "DOW-from-SPY"). No dataset in this system carries the Dow,
+ * and a plausible-looking index level is the most dangerous kind of fabricated
+ * number: nobody checks a figure they recognise. Nothing here is derived from
+ * anything else — each tile is one symbol's own quote, or it is absent.
+ */
 export function TopBar() {
   const prices = usePrices()
-  const spy = prices.SPY
+  const stripSymbols = useMemo(() => marketSymbols().slice(0, STRIP_TILES), [])
+  useTrackedSymbols(stripSymbols)
   const user = useAuthStore((s) => s.session?.user)
   const accountId = useUiStore((s) => s.accountId)
   const brokerageFilter = useUiStore((s) => s.brokerageFilter)
@@ -32,6 +49,9 @@ export function TopBar() {
   const counts = useMemo(() => {
     const result: Record<string, number> = {}
     for (const position of positions ?? []) {
+      // Live positions carry no brokerage (one paper portfolio, HKP-PLT-6), so
+      // they simply do not contribute to a per-brokerage count.
+      if (!position.brokerageId) continue
       result[position.brokerageId] = (result[position.brokerageId] ?? 0) + 1
     }
     return result
@@ -43,8 +63,16 @@ export function TopBar() {
         : (positions ?? []).filter((position) => position.brokerageId === brokerageFilter),
     [brokerageFilter, positions],
   )
-  const totals = useMemo(() => computeTotals(selectedPositions, prices), [selectedPositions, prices])
-  const basePct = spy?.dayChangePct ?? 0
+  // Real contract marks, when the market domain is live. `{}` in mock mode,
+  // which leaves the demo option model exactly as it was.
+  const { marks } = useOptionMarks(positions)
+  const totals = useMemo(
+    () => computeTotals(selectedPositions, prices, marks),
+    [selectedPositions, prices, marks],
+  )
+  const indices = stripSymbols
+    .map((symbol) => prices[symbol])
+    .filter((quote) => quote !== undefined)
 
   return (
     <header className="glass-nav sticky top-0 z-20 border-b border-line lg:pl-[284px]">
@@ -75,38 +103,39 @@ export function TopBar() {
           cash={portfolioMeta?.cash ?? 0}
           dayPl={totals.dayPl}
           dayPlPct={totals.dayPlPct}
+          dayPlAvailable={totals.dayPlAvailable}
           loading={positionsLoading || metaLoading}
         />
 
-        {/* Index strip */}
+        {/* Index strip — one tile per symbol the data source actually serves. */}
         <div className="ml-auto hidden items-center gap-7 xl:flex">
-          {INDICES.map((index) => {
-            const pct = basePct * index.factor
-            const value = index.base * (1 + pct / 100)
-            return (
-              <div key={index.label} className="text-right">
-                <div className="text-[11px] font-semibold tracking-[0.04em] text-ink-muted uppercase">
-                  {index.label}
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="num text-[14px] font-bold text-ink">
-                    {value.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                  <span
-                    className={cn(
-                      'num text-[12px] font-bold',
-                      pct >= 0 ? 'text-up' : 'text-down',
-                    )}
-                  >
-                    {formatSignedPercent(pct)}
-                  </span>
-                </div>
+          {indices.map((quote) => (
+            <div key={quote.symbol} className="text-right">
+              <div className="flex items-center justify-end gap-1.5">
+                <span className="text-[11px] font-semibold tracking-[0.04em] text-ink-muted uppercase">
+                  {quote.symbol}
+                </span>
+                <ProvenanceTag provenance={quote.provenance} />
+                <StaleTag stale={quote.stale} />
               </div>
-            )
-          })}
+              <div className="flex items-baseline gap-1.5">
+                <span className="num text-[14px] font-bold text-ink">
+                  {quote.price.toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+                <span
+                  className={cn(
+                    'num text-[12px] font-bold',
+                    quote.dayChangePct >= 0 ? 'text-up' : 'text-down',
+                  )}
+                >
+                  {formatSignedPercent(quote.dayChangePct)}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="flex items-center gap-1.5 xl:ml-5">

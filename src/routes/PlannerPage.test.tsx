@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PlannerIdea } from '@/api/newsTypes'
@@ -10,14 +10,8 @@ const plans = [
   { id: 'disabled-user', source: 'user', symbol: 'YOU' },
 ] as PlannerIdea[]
 
-const createMutation = vi.hoisted(() => ({
-  mutateAsync: vi.fn(),
-  isPending: false,
-}))
-
 vi.mock('@/hooks/queries', () => ({
   usePlannerIdeas: () => ({ data: plans, isLoading: false }),
-  useCreatePlannerIdea: () => createMutation,
 }))
 
 vi.mock('@/components/plan/PlannerIdeaTile', () => ({
@@ -35,8 +29,6 @@ vi.mock('@/components/plan/CreateIdeaModal', () => ({
 describe('PlannerPage filters', () => {
   beforeEach(() => {
     usePlanExecutionStore.setState({ disabledIds: ['disabled-user'] })
-    createMutation.mutateAsync.mockReset()
-    createMutation.mutateAsync.mockResolvedValue({ id: 'created-plan' })
   })
 
   it('uses the summary strip as the only filter and includes disabled plans', () => {
@@ -59,27 +51,17 @@ describe('PlannerPage filters', () => {
     expect(screen.getByText('disabled-user')).toBeInTheDocument()
   })
 
-  it('creates an AI-organized plan from the chat composer', async () => {
+  it('no longer offers the client-side AI composer', () => {
     render(
       <MemoryRouter>
         <PlannerPage />
       </MemoryRouter>,
     )
 
-    expect(screen.queryByText('Trade Planner')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Trade plan prompt' }), {
-      target: { value: '5000 on SNDK earnings run-up, sell when doubles' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
-
-    await waitFor(() =>
-      expect(createMutation.mutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          symbol: 'SNDK',
-          maxAmount: 5000,
-          originalPrompt: '5000 on SNDK earnings run-up, sell when doubles',
-        }),
-      ),
-    )
+    // The composer was a regex over the prompt that invented an entry band, a
+    // target band, a stop and a horizon from a seeded open price. The real
+    // composer is service-ai's (HKP-AI-3a, Wave C).
+    expect(screen.queryByRole('textbox', { name: 'Trade plan prompt' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument()
   })
 })

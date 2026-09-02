@@ -7,6 +7,8 @@ import { useAssistantContext } from '@/hooks/useAssistantContext'
 import { usePrices } from '@/store/priceStore'
 import { usePositions } from '@/hooks/queries'
 import { computeTotals } from '@/lib/portfolioMath'
+import { useOptionMarks } from '@/hooks/marketQueries'
+import { dayChangeOf } from '@/lib/dayChange'
 import {
   formatMoney,
   formatQty,
@@ -19,6 +21,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { RiskRewardMeter } from '@/components/intelligence/RiskRewardMeter'
+import { AIUnavailable } from '@/components/intelligence/AIUnavailable'
 import { ScrubbableAreaChart } from '@/components/charts/ScrubbableAreaChart'
 import { optionPremiumHistory, underlyingHistory } from '@/lib/optionHistory'
 import { PositionActionFooter } from '@/components/positions/PositionActionFooter'
@@ -50,7 +53,11 @@ export function PositionDetailsPage() {
   const { data: positions, isLoading } = usePositions(accountId)
   const { data: plannerIdeas } = usePlannerIdeas()
 
-  const totals = useMemo(() => computeTotals(positions ?? [], prices), [positions, prices])
+  const { marks } = useOptionMarks(positions)
+  const totals = useMemo(
+    () => computeTotals(positions ?? [], prices, marks),
+    [positions, prices, marks],
+  )
   const valuation = totals.valuations.find((v) => v.position.id === id)
   const snap = valuation ? prices[valuation.position.symbol] : undefined
   // Plans already attached to this holding, so the sheet opens populated.
@@ -110,10 +117,11 @@ export function PositionDetailsPage() {
     )
   }
 
-  const { position, price, dayChange, dayChangePct, marketValue, totalReturn, totalReturnPct } =
-    valuation
+  const { position, price, marketValue, totalReturn, totalReturnPct } = valuation
   const ai = position.ai
-  const up = dayChangePct >= 0
+  // A server-marked contract has no prior mark; today's move is unknown, and
+  // the hint says so rather than printing "+$0.00 (+0.00%) today".
+  const day = dayChangeOf(valuation)
 
   return (
     <div className="space-y-4 pb-4">
@@ -196,8 +204,8 @@ export function PositionDetailsPage() {
           <DetailStat
             label={position.option ? 'Mark' : 'Price'}
             value={formatMoney(price)}
-            hint={`${formatSignedMoney(dayChange)} (${formatSignedPercent(dayChangePct)}) today`}
-            tone={up ? 'up' : 'down'}
+            hint={day.available ? `${day.combined} today` : 'Today’s change unavailable'}
+            tone={day.tone}
           />
           <DetailStat label="Value" value={formatMoney(marketValue)} />
           <DetailStat label="Qty" value={formatQty(position.quantity)} />
@@ -241,47 +249,63 @@ export function PositionDetailsPage() {
       ) : null}
 
       {/* ---- Intelligence ---- */}
-      <section className="card relative overflow-hidden rounded-[24px] border-brand-400/20">
-        <div className="ai-gradient absolute inset-x-0 top-0 h-[3px]" aria-hidden />
-        <div className="ai-tint absolute inset-0" aria-hidden />
-        <div className="relative p-4 sm:p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <AIConvictionBadge score={ai.conviction} delta={ai.convictionDelta} size="lg" />
-            <RecommendationChip recommendation={ai.recommendation} />
-            <span className="num text-[13px] font-semibold text-ink-soft">
-              Target {formatRange(ai.targetLow, ai.targetHigh)}
-            </span>
-          </div>
+      {/* The entire model panel is conditional. plt records a
+          `decision_episode_id`, not the episode's content, and service-ai
+          exposes no episode read API yet (HKP-AI-1) — so a live position
+          usually has no assessment, and a neutral placebo panel would be an
+          opinion nothing produced. */}
+      {ai ? (
+        <>
+          <section className="card relative overflow-hidden rounded-[24px] border-brand-400/20">
+            <div className="ai-gradient absolute inset-x-0 top-0 h-[3px]" aria-hidden />
+            <div className="ai-tint absolute inset-0" aria-hidden />
+            <div className="relative p-4 sm:p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <AIConvictionBadge score={ai.conviction} delta={ai.convictionDelta} size="lg" />
+                <RecommendationChip recommendation={ai.recommendation} />
+                <span className="num text-[13px] font-semibold text-ink-soft">
+                  Target {formatRange(ai.targetLow, ai.targetHigh)}
+                </span>
+              </div>
 
-          <p className="mt-3 text-[14px] leading-relaxed font-semibold text-ink">
-            {ai.recommendationNote}
-          </p>
+              <p className="mt-3 text-[14px] leading-relaxed font-semibold text-ink">
+                {ai.recommendationNote}
+              </p>
 
-          <h3 className="mt-4 mb-2 flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-brand-300 uppercase">
-            <Sparkles size={13} />
-            Why StratFolio holds this view
-          </h3>
-          <ul className="space-y-2.5">
-            {ai.thesis.map((bullet, i) => (
-              <li key={i} className="flex gap-2.5 text-[13.5px] leading-relaxed text-ink-soft">
-                <span className="ai-gradient mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden />
-                <span>{bullet}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-[11.5px] text-ink-muted">
-            Thesis refreshed {relativeTime(ai.updatedAt)} · simulated model output
-          </p>
-        </div>
-      </section>
+              <h3 className="mt-4 mb-2 flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-brand-300 uppercase">
+                <Sparkles size={13} />
+                Why StratFolio holds this view
+              </h3>
+              <ul className="space-y-2.5">
+                {ai.thesis.map((bullet, i) => (
+                  <li key={i} className="flex gap-2.5 text-[13.5px] leading-relaxed text-ink-soft">
+                    <span
+                      className="ai-gradient mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
+                      aria-hidden
+                    />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-[11.5px] text-ink-muted">
+                Thesis refreshed {relativeTime(ai.updatedAt)}
+              </p>
+            </div>
+          </section>
 
-      <RiskRewardMeter
-        currentPrice={price}
-        upsideTarget={ai.upsideTarget}
-        downsideRisk={ai.downsideRisk}
-        riskRewardRatio={ai.riskRewardRatio}
-        horizon={ai.horizon}
-      />
+          <RiskRewardMeter
+            currentPrice={price}
+            upsideTarget={ai.upsideTarget}
+            downsideRisk={ai.downsideRisk}
+            riskRewardRatio={ai.riskRewardRatio}
+            horizon={ai.horizon}
+          />
+        </>
+      ) : (
+        <section className="card rounded-[24px] p-4 sm:p-5">
+          <AIUnavailable detail="No model assessment is recorded for this position." />
+        </section>
+      )}
 
       <RelatedNews symbol={position.symbol} />
 

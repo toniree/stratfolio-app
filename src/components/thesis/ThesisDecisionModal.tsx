@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { BrainCircuit, Check, MessageCircle, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import type { Idea } from '@/api/types'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 
 export type ThesisDecisionMode = 'reject' | 'add'
 
 export function ThesisDecisionModal({
-  idea,
+  symbol,
+  label,
   mode,
   open,
   pending,
@@ -16,7 +16,10 @@ export function ThesisDecisionModal({
   onOpenChange,
   onConfirm,
 }: {
-  idea: Idea
+  symbol: string
+  /** Contract or company line under the title, when there is one. A live
+   *  thesis has neither (HKP-MND-4), so it is optional. */
+  label?: string
   mode: ThesisDecisionMode
   open: boolean
   pending?: boolean
@@ -43,13 +46,13 @@ export function ThesisDecisionModal({
       title={
         adding ? (
           <span className="block text-[13px] font-extrabold tracking-[0.16em] text-ink uppercase">
-            Active plans
+            {`Accept ${symbol} thesis`}
           </span>
         ) : (
-          <span className="-mt-[2mm] block">{`Reject ${idea.symbol} thesis`}</span>
+          <span className="-mt-[2mm] block">{`Reject ${symbol} thesis`}</span>
         )
       }
-      description={adding ? undefined : (idea.contractDetail ?? idea.company)}
+      description={adding ? undefined : label}
       footer={
         <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
@@ -61,7 +64,7 @@ export function ThesisDecisionModal({
             disabled={pending}
           >
             {adding ? <Check size={15} /> : <Trash2 size={15} />}
-            {pending ? 'Saving…' : adding ? 'Add trade plan' : 'Close thesis'}
+            {pending ? 'Saving…' : adding ? 'Accept thesis' : 'Close thesis'}
           </Button>
         </div>
       }
@@ -85,7 +88,7 @@ export function ThesisDecisionModal({
           </span>
           <p>
             {adding
-              ? 'Prompt is optional. Type anything from max capital, price targets and bands, to a de-risk strategy or horizon.'
+              ? 'A note is optional. Accepting records your decision and files it in the action history; it does not place a trade or create a plan.'
               : 'A reason is optional. Sharing one helps the model learn which theses fit your strategy and which ones do not.'}
           </p>
         </div>
@@ -104,7 +107,7 @@ export function ThesisDecisionModal({
               rows={4}
               placeholder={
                 adding
-                  ? '(Optional) max capital, targets and bands, de-risk strategy, horizon…'
+                  ? '(Optional) why this thesis fits — recorded with your decision'
                   : '(Optional) give a reason for AI to understand the rejection'
               }
               className="min-h-[96px] w-full resize-none bg-transparent px-1 py-1.5 text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-muted/65 placeholder:italic"

@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
-import { Bot, CheckCircle2, ChevronRight, Circle, UserRound } from 'lucide-react'
+import { Bot, ChevronRight, UserRound } from 'lucide-react'
+import { CriterionIcon } from '@/components/plan/CriterionIcon'
 import { cn } from '@/lib/cn'
-import { formatMoney, relativeTime } from '@/lib/format'
+import { MISSING, formatMoney, relativeTime } from '@/lib/format'
 import type { PlannerIdea } from '@/api/newsTypes'
 import { TileShell } from '@/components/shared/TileShell'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
@@ -111,11 +112,7 @@ export function PlannerIdeaTile({ idea, disabled = false }: { idea: PlannerIdea;
         <ul className="mt-1 space-y-1">
           {planCriteria(idea).slice(0, 2).map((criterion) => (
             <li key={criterion.text} className="flex items-start gap-1.5">
-              {criterion.met ? (
-                <CheckCircle2 size={11} strokeWidth={2.4} className="mt-px shrink-0 text-up" />
-              ) : (
-                <Circle size={11} strokeWidth={2} className="mt-px shrink-0 text-ink-muted/70" />
-              )}
+              <CriterionIcon state={criterion.state} size={11} />
               <span className="min-w-0 truncate text-[10px] leading-snug text-white/78">
                 {criterion.text}
               </span>
@@ -164,9 +161,14 @@ function PlanFact({
   )
 }
 
-function formatRange(low: number, high: number): string {
-  const whole = Math.max(low, high) >= 100
-  return low === high
-    ? formatMoney(low, { whole })
-    : `${formatMoney(low, { whole })}–${formatMoney(high, { whole })}`
+function formatRange(low?: number, high?: number): string {
+  // A live plan has no target band and no absolute stop: plt records exits as
+  // fractions and has no field for either (§3.3). Missing stays missing.
+  if (low === undefined && high === undefined) return MISSING
+  const lo = low ?? high!
+  const hi = high ?? low!
+  const whole = Math.max(lo, hi) >= 100
+  return lo === hi
+    ? formatMoney(lo, { whole })
+    : `${formatMoney(lo, { whole })}–${formatMoney(hi, { whole })}`
 }

@@ -17,8 +17,11 @@ export function TickerChip({
   size?: 'xs' | 'md'
 }) {
   const snap = usePrice(symbol)
-  const pct = snap?.dayChangePct ?? 0
-  const up = pct >= 0
+  // A symbol the bound data source does not serve has no day change at all.
+  // `?? 0` would print "▲ 0.00%" — a flat-day claim about a stock we have no
+  // quote for.
+  const pct = snap?.dayChangePct
+  const up = (pct ?? 0) >= 0
 
   return (
     <span
@@ -49,11 +52,13 @@ export function TickerChip({
       <span
         className={cn(
           'num font-bold',
-          up ? 'text-up' : 'text-down',
+          pct === undefined ? 'text-ink-muted' : up ? 'text-up' : 'text-down',
           size === 'xs' ? 'text-[10.5px]' : 'text-[11.5px]',
         )}
       >
-        {up ? '▲' : '▼'} {formatSignedPercent(pct, 2).replace(/^[+−]/, '')}
+        {pct === undefined
+          ? '—'
+          : `${up ? '▲' : '▼'} ${formatSignedPercent(pct, 2).replace(/^[+−]/, '')}`}
       </span>
     </span>
   )

@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
 import { BotMessageSquare, Check } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { useUiStore } from '@/store/uiStore'
+import { useAiTradingSwitch } from '@/hooks/policyQueries'
 
 type ConfirmationState = 'enabled' | 'disabled' | null
 
 /** Small real on/off control for the mobile Positions carousel header. */
 export function CompactAITradingToggle() {
-  const enabled = useUiStore((state) => state.aiTradingEnabled)
-  const setEnabled = useUiStore((state) => state.setAiTradingEnabled)
+  const { enabled, setEnabled, serverEnforced } = useAiTradingSwitch()
   const [confirmation, setConfirmation] = useState<ConfirmationState>(null)
 
   const toggle = () => {
@@ -47,7 +46,11 @@ export function CompactAITradingToggle() {
           />
         </span>
       </button>
-      <AITradingConfirmation state={confirmation} onClose={() => setConfirmation(null)} />
+      <AITradingConfirmation
+        state={confirmation}
+        serverEnforced={serverEnforced}
+        onClose={() => setConfirmation(null)}
+      />
     </div>
   )
 }
@@ -60,8 +63,7 @@ export function AITradingControl({
   variant?: 'rail' | 'row'
   onChrome?: boolean
 }) {
-  const enabled = useUiStore((state) => state.aiTradingEnabled)
-  const setEnabled = useUiStore((state) => state.setAiTradingEnabled)
+  const { enabled, setEnabled, serverEnforced } = useAiTradingSwitch()
   const [confirmation, setConfirmation] = useState<ConfirmationState>(null)
 
   const toggle = () => {
@@ -134,9 +136,19 @@ export function AITradingControl({
                   onChrome ? 'text-white/70' : 'text-ink-muted',
                 )}
               >
-                {enabled
-                  ? 'AI and user plans execute automatically at their triggers.'
-                  : 'Only plans you created by hand or explicitly approved will execute automatically.'}
+                {/* No autonomous entry loop exists anywhere in the backend
+                    (HKP-XSV-1): bkt's monitor scans only OPEN positions and
+                    entry happens solely on an explicit POST. What changed in
+                    APP-114 is where this switch lives — off is now enforced by
+                    the platform and the execution service, not by this
+                    browser (contracts §16/§17). */}
+                {serverEnforced
+                  ? enabled
+                    ? 'The platform allows AI-initiated execution. Nothing enters a position without an explicit action.'
+                    : 'The platform refuses every AI-initiated execution while this is off — enforced server-side, not here.'
+                  : enabled
+                    ? 'The model may draft plans for you. Nothing enters a position without an explicit action.'
+                    : 'The model will not draft plans. Nothing enters a position without an explicit action.'}
               </p>
             ) : null}
           </div>
@@ -164,16 +176,22 @@ export function AITradingControl({
         </div>
       </button>
 
-      <AITradingConfirmation state={confirmation} onClose={() => setConfirmation(null)} />
+      <AITradingConfirmation
+        state={confirmation}
+        serverEnforced={serverEnforced}
+        onClose={() => setConfirmation(null)}
+      />
     </div>
   )
 }
 
 function AITradingConfirmation({
   state,
+  serverEnforced,
   onClose,
 }: {
   state: ConfirmationState
+  serverEnforced: boolean
   onClose: () => void
 }) {
   const enabled = state === 'enabled'
@@ -213,9 +231,13 @@ function AITradingConfirmation({
             AI Trading {enabled ? 'on' : 'off'}
           </p>
           <p className="mt-0.5 text-[9.5px] leading-snug text-ink-muted">
-            {enabled
-              ? 'All active plans can execute automatically.'
-              : 'Only plans you created by hand or approved will execute automatically.'}
+            {serverEnforced
+              ? enabled
+                ? 'The platform allows AI-initiated execution. Entry still needs an explicit action.'
+                : 'The execution service will refuse every AI-initiated entry.'
+              : enabled
+                ? 'The model may draft plans. Entry always needs an explicit action.'
+                : 'The model will not draft plans.'}
           </p>
         </div>
       </div>

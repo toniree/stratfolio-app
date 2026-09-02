@@ -36,7 +36,9 @@ export function ThesisScenarioLadder({
       spot: underlying,
       strike: contract.strike,
       years: holdYears,
-      volatility: analytics.iv / 100,
+      // No implied vol available: price the ladder off realised vol, which
+      // is measured from the underlying's own history rather than invented.
+      volatility: (analytics.iv ?? analytics.hv) / 100,
       right: contract.right,
     }).price
     const returnPct = analytics.debit > 0 ? (value / analytics.debit - 1) * 100 : 0

@@ -15,8 +15,12 @@ import {
 import { cn } from '@/lib/cn'
 import { formatMoney } from '@/lib/format'
 import { SYMBOL_MAP } from '@/api/mock/seededData'
-import { usePrice } from '@/store/priceStore'
+import { usePrice, useTrackedSymbols } from '@/store/priceStore'
 import { useTerminalStore } from '@/store/terminalStore'
+import { isMarketLive, useLiveBars, useLiveChain } from '@/hooks/marketQueries'
+import { TRUNCATED_BARS_NOTE } from '@/api/http/adapters/market'
+import type { MndBarInterval } from '@/api/http/wire/mnd'
+import { ProvenanceTag, StaleTag } from '@/components/shared/ProvenanceTag'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { PercentChange } from '@/components/shared/PercentChange'
 import { StudyIcon } from '@/components/shared/StudyIcon'
@@ -44,6 +48,22 @@ import {
 const UP = '#34d399'
 const DOWN = '#f87171'
 const TIMEFRAMES: Timeframe[] = ['1D', '1W', '1M', '3M', '1Y']
+
+/**
+ * Each timeframe as a **bounded** bar request (§15.3).
+ *
+ * The facade requires `start` and `end` on every bars call — stricter than the
+ * gRPC RPC, which allows an unbounded scan — so a timeframe is expressed as a
+ * span back from now plus an interval the route accepts (1m/5m/15m/1h/1d), and
+ * never as "give me everything for this symbol".
+ */
+const LIVE_FRAMES: Record<Timeframe, { spanMs: number; interval: MndBarInterval }> = {
+  '1D': { spanMs: 2 * 86_400_000, interval: '5m' },
+  '1W': { spanMs: 8 * 86_400_000, interval: '1h' },
+  '1M': { spanMs: 32 * 86_400_000, interval: '1d' },
+  '3M': { spanMs: 95 * 86_400_000, interval: '1d' },
+  '1Y': { spanMs: 370 * 86_400_000, interval: '1d' },
+}
 
 const STUDY_COLORS: Record<Exclude<StudyKey, 'volume' | 'rsi' | 'bb'>, string> = {
   sma20: '#f5c26b',
@@ -73,13 +93,45 @@ export function TerminalChart({ className }: { className?: string }) {
   const setContract = useTerminalStore((s) => s.setContract)
   const quote = usePrice(symbol)
   const spec = SYMBOL_MAP.get(symbol)
+  const live = isMarketLive()
+  useTrackedSymbols(useMemo(() => [symbol], [symbol]))
 
   const contractLabel = contract
     ? `${symbol} $${contract.strike % 1 === 0 ? contract.strike : contract.strike.toFixed(1)}${contract.right === 'CALL' ? 'C' : 'P'}`
     : null
-  /** Live mark + day change for the focused contract, off the same pricer as the chain. */
+
+  const contractExpiration = contract
+    ? new Date(contract.expiryTime * 1000).toISOString().slice(0, 10)
+    : undefined
+  const contractChain = useLiveChain(symbol, {
+    expiration: contractExpiration,
+    enabled: live && contract !== null,
+  })
+
+  /**
+   * The focused contract's mark.
+   *
+   * Live: the server's own chain mid for exactly this contract. There is **no
+   * change figure** — the facade exposes no historical chain
+   * (`GetChainSnapshotHistory` is deferred with no route), so a prior mark
+   * simply does not exist and the header renders "—" rather than a 0.00% that
+   * would read as "unchanged".
+   *
+   * Mock: the deterministic pricer, off the same smile as the chain, so the
+   * header and the ladder can never contradict each other.
+   */
   const optionQuote = useMemo(() => {
-    if (!contract || !quote) return null
+    if (!contract) return null
+    if (live) {
+      const match = contractChain.data?.contracts.find(
+        (candidate) =>
+          candidate.right === contract.right &&
+          Math.abs(candidate.strike - contract.strike) < 1e-6,
+      )
+      const mark = match?.mid ?? (match?.bid !== undefined && match.ask !== undefined ? (match.bid + match.ask) / 2 : undefined)
+      return mark === undefined ? null : { mark, change: undefined, changePct: undefined }
+    }
+    if (!quote) return null
     const years = (contract.expiryTime - Date.now() / 1000) / (365 * 86_400)
     const mark = contractPrice(symbol, quote.price, contract.strike, contract.right, years)
     const prevMark = contractPrice(symbol, quote.previousClose, contract.strike, contract.right, years)
@@ -88,9 +140,10 @@ export function TerminalChart({ className }: { className?: string }) {
       change: mark - prevMark,
       changePct: prevMark > 0 ? ((mark - prevMark) / prevMark) * 100 : 0,
     }
-  }, [contract, quote, symbol])
+  }, [contract, contractChain.data, live, quote, symbol])
 
   const [timeframe, setTimeframe] = useState<Timeframe>('1D')
+  const liveBars = useLiveBars(symbol, { ...LIVE_FRAMES[timeframe], enabled: live })
   const [studiesOpen, setStudiesOpen] = useState(false)
   const [studies, setStudies] = useState<Record<StudyKey, boolean>>({
     volume: true,
@@ -255,11 +308,20 @@ export function TerminalChart({ className }: { className?: string }) {
     const chart = chartRef.current
     if (!candleSeries || !chart) return
 
-    const underlying = buildCandles(symbol, timeframe, lastPriceRef.current)
-    const candles = contract
-      ? optionCandles(symbol, underlying, contract.strike, contract.right, contract.expiryTime)
-      : underlying
-    candlesRef.current = candles
+    // Live: real bars over a bounded window. Mock: the deterministic tape.
+    const underlying = live ? (liveBars.data?.bars ?? []) : buildCandles(symbol, timeframe, lastPriceRef.current)
+    // Repricing a tape into a contract's own history uses the seeded IV smile,
+    // which is a demo model, and the facade has no historical chain to replace
+    // it with (`GetHistoricalChain` is deferred with no route). In live mode
+    // the chart therefore stays on the underlying and says so, rather than
+    // drawing an invented option tape (§6).
+    const candles =
+      contract && !live
+        ? optionCandles(symbol, underlying, contract.strike, contract.right, contract.expiryTime)
+        : underlying
+    // Copied, not aliased: the last bar is mutated below as the quote ticks,
+    // and in live mode `candles` is TanStack's cached response.
+    candlesRef.current = candles.map((c) => ({ ...c }))
     candleSeries.setData(
       candles.map((c) => ({
         time: c.time as UTCTimestamp,
@@ -271,7 +333,7 @@ export function TerminalChart({ className }: { className?: string }) {
     )
     feedStudies(studySeriesRef.current, volumeSeriesRef.current, candles, studyConfig)
     chart.timeScale().fitContent()
-  }, [symbol, timeframe, studyConfig, contract])
+  }, [symbol, timeframe, studyConfig, contract, live, liveBars.data])
 
   /* ---------- roll the last candle off the live quote ---------- */
   const price = quote?.price
@@ -280,15 +342,18 @@ export function TerminalChart({ className }: { className?: string }) {
     const candles = candlesRef.current
     if (!candleSeries || price === undefined || candles.length === 0) return
     const last = candles[candles.length - 1]
-    const value = contract
-      ? contractPrice(
-          symbol,
-          price,
-          contract.strike,
-          contract.right,
-          (contract.expiryTime - Date.now() / 1000) / (365 * 86_400),
-        )
-      : price
+    // In live mode the chart is always the underlying (see above), so the
+    // quote rolls the bar directly; no in-browser option repricing.
+    const value =
+      contract && !live
+        ? contractPrice(
+            symbol,
+            price,
+            contract.strike,
+            contract.right,
+            (contract.expiryTime - Date.now() / 1000) / (365 * 86_400),
+          )
+        : price
     last.close = value
     last.high = Math.max(last.high, value)
     last.low = Math.min(last.low, value)
@@ -299,7 +364,7 @@ export function TerminalChart({ className }: { className?: string }) {
       low: round2(last.low),
       close: round2(last.close),
     })
-  }, [price, contract, symbol])
+  }, [price, contract, symbol, live])
 
   const dayUp = (quote?.dayChange ?? 0) >= 0
   const activeStudyCount = useMemo(
@@ -350,20 +415,34 @@ export function TerminalChart({ className }: { className?: string }) {
             <span
               className={cn(
                 'num text-[17px] font-extrabold',
-                optionQuote.change >= 0 ? 'text-up' : 'text-down',
+                optionQuote.change === undefined
+                  ? 'text-ink'
+                  : optionQuote.change >= 0
+                    ? 'text-up'
+                    : 'text-down',
               )}
             >
               {formatMoney(optionQuote.mark)}
             </span>
-            <PercentChange
-              pct={optionQuote.changePct}
-              amount={optionQuote.change}
-              size="sm"
-              glyph
-            />
+            {optionQuote.change === undefined || optionQuote.changePct === undefined ? (
+              // A real chain quotes *now*; the facade exposes no historical
+              // chain, so there is no prior mark to change against. "—" is the
+              // honest answer where a 0.00% would read as "unchanged".
+              <span className="num text-[11px] font-semibold text-ink-muted" title="No prior contract mark: the market service exposes no historical chain in V1.">
+                —
+              </span>
+            ) : (
+              <PercentChange
+                pct={optionQuote.changePct}
+                amount={optionQuote.change}
+                size="sm"
+                glyph
+              />
+            )}
             <span className="num text-[10px] text-ink-muted">
               {symbol} {quote ? formatMoney(quote.price) : '—'}
             </span>
+            <ProvenanceTag provenance={live ? contractChain.data?.provenance : 'mock'} />
           </div>
         ) : (
           <div className="flex items-baseline gap-2">
@@ -373,6 +452,8 @@ export function TerminalChart({ className }: { className?: string }) {
             {quote ? (
               <PercentChange pct={quote.dayChangePct} amount={quote.dayChange} size="sm" glyph />
             ) : null}
+            <ProvenanceTag provenance={quote?.provenance} />
+            <StaleTag stale={quote?.stale} />
           </div>
         )}
 
@@ -417,6 +498,20 @@ export function TerminalChart({ className }: { className?: string }) {
             className="num pointer-events-none absolute top-2 left-3 z-10 text-[10px] font-medium whitespace-pre text-ink-muted [&_b]:font-bold [&_b]:text-ink"
           />
           <div ref={containerRef} className="h-[440px] w-full xl:h-[500px]" />
+          {live && liveBars.data?.truncated ? (
+            // A truncated page holds the OLDEST bars of the window: the newest
+            // candles are the missing ones, so the chart must not be read as
+            // current (§15.3).
+            <p className="border-t border-line px-3 py-1 text-[9.5px] text-[#f5c26b]">
+              {TRUNCATED_BARS_NOTE}
+            </p>
+          ) : null}
+          {live && contract ? (
+            <p className="border-t border-line px-3 py-1 text-[9.5px] text-ink-muted">
+              Showing {symbol}. Per-contract price history is not available: the market service
+              exposes no historical chain in V1.
+            </p>
+          ) : null}
         </div>
         <OptionsChain
           symbol={symbol}

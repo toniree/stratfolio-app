@@ -15,7 +15,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { formatMoney } from '@/lib/format'
+import { MISSING, formatMoney } from '@/lib/format'
 import type { Position } from '@/api/types'
 import type { PlannerIdea, PlannerIdeaSource, PlannerIntent } from '@/api/newsTypes'
 import { Button } from '@/components/ui/Button'
@@ -27,11 +27,12 @@ import {
   usePositions,
   useUpdatePlannerIdea,
 } from '@/hooks/queries'
-import { planIntent, watchedPlanOptions } from '@/lib/planIntent'
+import { planTitle, planIntent, watchedPlanOptions } from '@/lib/planIntent'
 import { adjustPlanFromPrompt, parseMaxAmountFromPrompt } from '@/lib/planPrompt'
 import { usePrice, usePrices } from '@/store/priceStore'
 import { useUiStore } from '@/store/uiStore'
 import { computeTotals } from '@/lib/portfolioMath'
+import { useOptionMarks } from '@/hooks/marketQueries'
 import { optionMark } from '@/lib/optionMath'
 
 const ADD_PLAN_LIMIT = 3
@@ -68,7 +69,8 @@ export function PositionPlanSheet({
   const prices = usePrices()
   const { data: accountPositions } = usePositions(accountId)
   const { data: portfolioMeta } = usePortfolioMeta(accountId)
-  const portfolioMarketValue = computeTotals(accountPositions ?? [], prices).marketValue
+  const { marks } = useOptionMarks(accountPositions)
+  const portfolioMarketValue = computeTotals(accountPositions ?? [], prices, marks).marketValue
   const sizing = {
     balance: portfolioMarketValue + (portfolioMeta?.cash ?? 0),
     cash: portfolioMeta?.cash ?? 0,
@@ -130,10 +132,12 @@ export function PositionPlanSheet({
       maxAmount: form.intent === 'open' ? maxAmount : undefined,
       entryLow: adjustment.entryLow ?? position.avgCost,
       entryHigh: adjustment.entryHigh ?? position.avgCost,
-      targetLow: adjustment.targetLow ?? position.ai.targetLow,
-      targetHigh: adjustment.targetHigh ?? position.ai.targetHigh,
+      // Falls back to the position's own entry, not to an invented model
+      // target, when there is no assessment to read one from.
+      targetLow: adjustment.targetLow ?? position.ai?.targetLow ?? position.avgCost,
+      targetHigh: adjustment.targetHigh ?? position.ai?.targetHigh ?? position.avgCost,
       stop: adjustment.stop ?? Math.max(0.01, position.avgCost * 0.8),
-      horizon: position.ai.horizon,
+      horizon: position.ai?.horizon ?? '',
       watchedOptions: parseWatchedOptions(form.watchedOptions),
     })
 
@@ -559,8 +563,8 @@ function AddPlanForm({
   const adjustment = adjustPlanFromPrompt(form.originalPrompt, sizing)
   const inferredEntryLow = adjustment.entryLow ?? position.avgCost
   const inferredEntryHigh = adjustment.entryHigh ?? position.avgCost
-  const inferredTargetLow = adjustment.targetLow ?? position.ai.targetLow
-  const inferredTargetHigh = adjustment.targetHigh ?? position.ai.targetHigh
+  const inferredTargetLow = adjustment.targetLow ?? position.ai?.targetLow ?? position.avgCost
+  const inferredTargetHigh = adjustment.targetHigh ?? position.ai?.targetHigh ?? position.avgCost
   const inferredStop = adjustment.stop ?? Math.max(0.01, position.avgCost * 0.8)
 
   return (
@@ -781,37 +785,52 @@ function fallbackPositionMaxAmount(position: Position): number {
 }
 
 function originalPrompt(plan: PlannerIdea): string {
-  return plan.originalPrompt?.trim() || plan.title.trim() || plan.notes.trim()
+  return plan.originalPrompt?.trim() || planTitle(plan) || plan.notes.trim()
 }
 
-function formatRange(low: number, high: number): string {
-  return low === high ? formatMoney(low) : `${formatMoney(low)} – ${formatMoney(high)}`
+function formatRange(low?: number, high?: number): string {
+  if (low === undefined && high === undefined) return MISSING
+  const lo = low ?? high!
+  const hi = high ?? low!
+  return lo === hi ? formatMoney(lo) : `${formatMoney(lo)} – ${formatMoney(hi)}`
 }
 
+/**
+ * How a position's plan reads on screen.
+ *
+ * Returns `undefined` when the user has saved no plan *and* the position has
+ * no model assessment. The old fallback invented a whole AI plan ("Trim half
+ * before earnings on a run-up") for any position that lacked one; with `ai`
+ * optional that would attribute a strategy to a model for the majority of live
+ * rows. No plan is a legitimate state — the caller renders it as one.
+ */
 export function positionPlanPresentation(
   position: Position,
   plan?: PlannerIdea,
-): PositionPlanPresentation {
+): PositionPlanPresentation | undefined {
   if (plan) {
     return {
       source: plan.source,
-      title: plan.title,
+      title: planTitle(plan),
       notes: plan.notes,
-      trigger: plan.horizon,
-      target: `${formatMoney(plan.targetLow)} – ${formatMoney(plan.targetHigh)}`,
+      trigger: plan.horizon ?? MISSING,
+      target: formatRange(plan.targetLow, plan.targetHigh),
     }
   }
 
+  const ai = position.ai
+  if (!ai) return undefined
+
   const earningsTrigger = position.option?.earningsDate
     ? `Before ${formatPlanDate(position.option.earningsDate)} earnings`
-    : position.ai.horizon
+    : ai.horizon
 
   return {
     source: 'ai',
     title: 'Trim half before earnings on a run-up',
-    notes: `${position.ai.recommendationNote} Keep the remaining position working only while the core thesis and risk limit remain intact.`,
+    notes: `${ai.recommendationNote} Keep the remaining position working only while the core thesis and risk limit remain intact.`,
     trigger: earningsTrigger,
-    target: `${formatMoney(position.ai.targetLow)} – ${formatMoney(position.ai.targetHigh)}`,
+    target: `${formatMoney(ai.targetLow)} – ${formatMoney(ai.targetHigh)}`,
   }
 }
 

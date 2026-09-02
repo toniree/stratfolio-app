@@ -10,8 +10,10 @@ import {
   formatSignedPercent,
 } from '@/lib/format'
 import type { PositionValuation } from '@/lib/portfolioMath'
+import { dayPlOf, type DayChangeView } from '@/lib/dayChange'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
+import { AIUnavailableChip } from '@/components/intelligence/AIUnavailable'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { PositionTile } from '@/components/positions/PositionTile'
 import { moneynessLabel } from '@/lib/optionMath'
@@ -110,12 +112,13 @@ export function HoldingsTable({
                   position,
                   price,
                   underlyingPrice,
-                  dayPl,
-                  dayChangePct,
                   marketValue,
                   totalReturn,
                   totalReturnPct,
                 } = valuation
+                // A contract marked from the server chain has no prior mark,
+                // so its day P/L is unknown — never a flat zero.
+                const day = dayPlOf(valuation)
                 const contract = position.option
                 const weight = totalMarketValue > 0 ? (marketValue / totalMarketValue) * 100 : 0
                 const isExpanded = expandedId === position.id
@@ -162,12 +165,18 @@ export function HoldingsTable({
 
                     <td className="py-3">
                       <div className="flex flex-nowrap items-center gap-1.5">
-                        <AIConvictionBadge
-                          score={position.ai.conviction}
-                          size="sm"
-                          showLabel={false}
-                        />
-                        <RecommendationChip recommendation={position.ai.recommendation} />
+                        {position.ai ? (
+                          <>
+                            <AIConvictionBadge
+                              score={position.ai.conviction}
+                              size="sm"
+                              showLabel={false}
+                            />
+                            <RecommendationChip recommendation={position.ai.recommendation} />
+                          </>
+                        ) : (
+                          <AIUnavailableChip />
+                        )}
                       </div>
                     </td>
 
@@ -185,7 +194,7 @@ export function HoldingsTable({
                       </div>
                     </td>
 
-                    <Money value={dayPl} pct={dayChangePct} />
+                    <DayCell day={day} />
                     <Money value={totalReturn} pct={totalReturnPct} />
 
                     <td className="num hidden py-3 pl-2 text-right text-[13px] font-semibold text-ink 2xl:table-cell">
@@ -293,6 +302,29 @@ function PageButton({
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * The day P/L cell. Renders "—" with no tint when the change is unknown: a
+ * green "+$0.00" would state that the position is flat today, which is a
+ * different claim from "we have no yesterday to compare against".
+ */
+function DayCell({ day }: { day: DayChangeView }) {
+  return (
+    <td
+      title={day.title}
+      aria-label={day.accessible}
+      className={cn(
+        'num py-3 text-right text-[13px] font-bold',
+        day.tone === 'up' ? 'text-up' : day.tone === 'down' ? 'text-down' : 'text-ink-muted',
+      )}
+    >
+      {day.money}
+      {day.available ? (
+        <div className="text-[10.5px] font-semibold">{day.percent}</div>
+      ) : null}
+    </td>
   )
 }
 

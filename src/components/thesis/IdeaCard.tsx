@@ -5,6 +5,7 @@ import type { Idea } from '@/api/types'
 import { usePrice } from '@/store/priceStore'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
+import { AIUnavailableChip } from '@/components/intelligence/AIUnavailable'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { EntryRange, TargetRange, CatalystList, RiskFactors, RangeStat } from '@/components/intelligence/Ranges'
 import { StaticPill } from '@/components/shared/Pill'
@@ -89,11 +90,17 @@ export function IdeaCard({ idea }: { idea: Idea }) {
         </div>
 
         <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-line pt-3.5">
-          <AIConvictionBadge score={idea.ai.conviction} delta={idea.ai.convictionDelta} />
-          <RecommendationChip recommendation={idea.ai.recommendation} />
-          <span className="text-[11.5px] text-ink-muted">
-            Updated {relativeTime(idea.ai.updatedAt)}
-          </span>
+          {idea.ai ? (
+            <>
+              <AIConvictionBadge score={idea.ai.conviction} delta={idea.ai.convictionDelta} />
+              <RecommendationChip recommendation={idea.ai.recommendation} />
+              <span className="text-[11.5px] text-ink-muted">
+                Updated {relativeTime(idea.ai.updatedAt)}
+              </span>
+            </>
+          ) : (
+            <AIUnavailableChip />
+          )}
         </div>
 
         <dl className="liquid-inset mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3 rounded-[18px] p-3">
@@ -105,7 +112,7 @@ export function IdeaCard({ idea }: { idea: Idea }) {
             tone="up"
             hint="to mid-target"
           />
-          <RangeStat label="Time horizon" value={idea.ai.horizon} hint="Thesis window" />
+          <RangeStat label="Time horizon" value={idea.ai?.horizon ?? '—'} hint="Thesis window" />
         </dl>
 
         <div className="mt-4 grid gap-4 border-t border-line pt-4 sm:grid-cols-2">

@@ -17,6 +17,8 @@ interface PortfolioHeroProps {
   marketValue: number
   dayPl: number
   dayPlPct: number
+  /** False when a holding has no prior mark and the sum would be partial. */
+  dayPlAvailable?: boolean
   periodReturn: number
   periodReturnPct: number
   period: PerformancePeriod
@@ -27,6 +29,7 @@ export function PortfolioHero({
   marketValue,
   dayPl,
   dayPlPct,
+  dayPlAvailable = true,
   periodReturn,
   periodReturnPct,
   period,
@@ -61,17 +64,23 @@ export function PortfolioHero({
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span
-          className={cn(
-            'num inline-flex items-center gap-1.5 text-[15px] font-bold',
-            dayPl >= 0 ? 'text-up' : 'text-down',
-          )}
-        >
-          <span aria-hidden>{dayPl >= 0 ? '▲' : '▼'}</span>
-          {formatSignedMoney(dayPl)}
-          <span className="font-semibold">({formatSignedPercent(dayPlPct)})</span>
-          <span className="font-medium text-ink-muted">today</span>
-        </span>
+        {dayPlAvailable ? (
+          <span
+            className={cn(
+              'num inline-flex items-center gap-1.5 text-[15px] font-bold',
+              dayPl >= 0 ? 'text-up' : 'text-down',
+            )}
+          >
+            <span aria-hidden>{dayPl >= 0 ? '▲' : '▼'}</span>
+            {formatSignedMoney(dayPl)}
+            <span className="font-semibold">({formatSignedPercent(dayPlPct)})</span>
+            <span className="font-medium text-ink-muted">today</span>
+          </span>
+        ) : (
+          <span className="num inline-flex items-center gap-1.5 text-[15px] font-bold text-ink-muted">
+            —<span className="font-medium">today</span>
+          </span>
+        )}
 
         {showPeriod ? (
           <span className="num inline-flex items-center gap-1.5 border-l border-line pl-3 text-[13.5px] font-semibold text-ink-soft">

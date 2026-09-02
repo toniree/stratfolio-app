@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn'
 import type { PlannerIdea } from '@/api/newsTypes'
 import type { Position } from '@/api/types'
 import { PlanNoteIcon } from '@/components/shared/PlanNoteIcon'
-import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
+import { ManualCloseTicket, isManualCloseAvailable } from '@/components/positions/ManualCloseTicket'
 import { PositionPlanSheet } from '@/components/positions/PositionPlanSheet'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
 
@@ -62,7 +62,9 @@ export function PositionActionFooter({
       kind: 'position',
       id: position.id,
       label: contract,
-      detail: `${position.ai.recommendation} · ${position.ai.conviction}/100 conviction`,
+      detail: position.ai
+        ? `${position.ai.recommendation} · ${position.ai.conviction}/100 conviction`
+        : undefined,
       to: `/app/positions/${position.id}`,
     })
   }
@@ -75,8 +77,18 @@ export function PositionActionFooter({
         <button
           type="button"
           aria-label={`Exit the ${position.symbol} position`}
+          // Disabled, not hidden, for the one live row that cannot be exited:
+          // a position the platform service never linked to a silent trade has
+          // no id bkt's exit route can take. The user should see that exiting
+          // exists rather than wonder where the control went.
+          disabled={!isManualCloseAvailable(position)}
+          title={
+            isManualCloseAvailable(position)
+              ? undefined
+              : 'This position is not linked to a silent trade, so the execution service cannot close it.'
+          }
           onClick={() => setClosing(true)}
-          className="grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96]"
+          className="grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96] disabled:opacity-40"
         >
           <LogOut size={16} strokeWidth={2.4} />
         </button>

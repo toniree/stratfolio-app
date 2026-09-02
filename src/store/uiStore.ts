@@ -11,6 +11,15 @@ interface UiState {
   /** Count of open modals/sheets; the news toast pauses while this is > 0. */
   overlayCount: number
   hasUnreadNews: boolean
+  /**
+   * The master AI-trading switch — **in mock mode only**.
+   *
+   * In live mode this value is not read at all: plt's
+   * `policy.ai_trading_enabled` is both the state and the enforcement
+   * (contracts §16/§17), reached through `useAiTradingSwitch`. A switch only
+   * this browser could see was never a kill switch, so nothing should consult
+   * this field directly again.
+   */
   aiTradingEnabled: boolean
   setAccountId: (id: string) => void
   setBrokerageFilter: (value: BrokerageFilterValue) => void

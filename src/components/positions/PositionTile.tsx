@@ -7,6 +7,7 @@ import type { PositionValuation } from '@/lib/portfolioMath'
 import type { Position } from '@/api/types'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { AIConvictionBadge } from '@/components/intelligence/AIConvictionBadge'
+import { AIUnavailableChip } from '@/components/intelligence/AIUnavailable'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
 import { Button } from '@/components/ui/Button'
 import { TileShell, TileStat } from '@/components/shared/TileShell'
@@ -15,13 +16,14 @@ import {
   OptionContractChips,
 } from '@/components/positions/OptionContractDetails'
 import { usePrice } from '@/store/priceStore'
-import { useUiStore } from '@/store/uiStore'
+import { useAiTradingSwitch } from '@/hooks/policyQueries'
 import { SymbolIcon } from '@/components/shared/SymbolIcon'
 import { StudyIcon } from '@/components/shared/StudyIcon'
 import { StudyTip } from '@/components/shared/StudyTip'
 import { MINI_CHART_HEIGHT, PositionMiniChart } from '@/components/charts/PositionMiniChart'
 import { optionPremiumHistory, underlyingHistory } from '@/lib/optionHistory'
-import { ManualCloseTicket } from '@/components/positions/ManualCloseTicket'
+import { ManualCloseTicket, isManualCloseAvailable } from '@/components/positions/ManualCloseTicket'
+import { planTitle } from '@/lib/planIntent'
 import { PositionFieldSettings } from '@/components/positions/PositionFieldSettings'
 import { PositionPlanSheet } from '@/components/positions/PositionPlanSheet'
 import {
@@ -38,6 +40,9 @@ import {
   type PositionTileField,
 } from '@/store/positionTilePreferences'
 import { usePlannerIdeas } from '@/hooks/queries'
+import { useOptionMarks } from '@/hooks/marketQueries'
+import { dayChangeOf, dayPlOf } from '@/lib/dayChange'
+import { optionMarkKey } from '@/api/http/adapters/market'
 import type { PlannerIdea } from '@/api/newsTypes'
 
 /** Compact carousel tile — high signal only. Depth lives on the details page. */
@@ -49,15 +54,37 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const storedFields = usePositionTilePreferences((state) => state.fields)
   const quoteType = usePositionTilePreferences((state) => state.quoteType)
-  const aiTradingEnabled = useUiStore((state) => state.aiTradingEnabled)
+  // Live mode reads the server-enforced switch (§16), not this browser's.
+  const aiTradingEnabled = useAiTradingSwitch().enabled
   const { data: plannerIdeas } = usePlannerIdeas()
-  const { position, price, dayChangePct, dayChange, marketValue, totalReturn, totalReturnPct } =
-    valuation
+  const { position, price, marketValue, totalReturn, totalReturnPct } = valuation
+  // Never read `dayChange`/`dayChangePct` straight: a server-marked contract
+  // has no prior mark, and its 0 must render as "—", not as "unchanged".
+  const day = dayChangeOf(valuation)
   const underlying = usePrice(position.symbol)
-  const up = dayChangePct >= 0
+  // Real chain values for the stats panel below. The query key matches the
+  // page-level `useOptionMarks`, so TanStack serves this from the same
+  // request rather than issuing one per tile.
+  const { marks } = useOptionMarks(useMemo(() => [position], [position]))
+  const contractMark = position.option
+    ? marks[
+        optionMarkKey({
+          symbol: position.symbol,
+          right: position.option.right,
+          strike: position.option.strike,
+          expiry: position.option.expiry,
+        })
+      ]
+    : undefined
+  // The sparkline still needs a direction; open P/L is a real number even when
+  // today's change is unknown.
+  const up = day.available ? day.tone === 'up' : totalReturn >= 0
   const to = `/app/positions/${position.id}`
   const userNote = position.userNote?.trim()
-  const note = userNote || position.ai.recommendationNote
+  const ai = position.ai
+  // No user note and no model note leaves nothing to say — better an empty
+  // notes list than a sentence the model never wrote.
+  const note = userNote || ai?.recommendationNote || ''
   // Notes read as a list of separate observations, so each sentence gets its
   // own bullet rather than the heading carrying a single decorative dot.
   const noteItems = note
@@ -146,8 +173,15 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
               <span className="hidden lg:inline">{formatMoney(price)}</span>
             </div>
           </div>
-          <div className={cn('num mt-0.5 text-[11.5px] font-bold lg:mt-1', up ? 'text-up' : 'text-down')}>
-            {formatSignedMoney(dayChange)} ({formatSignedPercent(dayChangePct)})
+          <div
+            title={day.title}
+            aria-label={day.accessible}
+            className={cn(
+              'num mt-0.5 text-[11.5px] font-bold lg:mt-1',
+              day.tone === 'up' ? 'text-up' : day.tone === 'down' ? 'text-down' : 'text-ink-muted',
+            )}
+          >
+            {day.combined}
           </div>
         </div>
       </div>
@@ -198,24 +232,28 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
                     </EventStepButton>
                   </>
                 ) : null}
-                <span className="mr-1 ml-auto shrink-0">
-                  <RecommendationChip
-                    recommendation={position.ai.recommendation}
-                    className="px-1.5 py-px text-[9px]"
-                  />
-                </span>
+                {ai ? (
+                  <span className="mr-1 ml-auto shrink-0">
+                    <RecommendationChip
+                      recommendation={ai.recommendation}
+                      className="px-1.5 py-px text-[9px]"
+                    />
+                  </span>
+                ) : null}
               </div>
               <div className="mt-1.5 flex items-center gap-1.5">
                 <p className="text-[9px] font-extrabold tracking-[0.08em] text-white uppercase">
                   Notes
                 </p>
-                <AIConvictionBadge
-                  score={position.ai.conviction}
-                  delta={position.ai.convictionDelta}
-                  size="xs"
-                  showLabel={false}
-                  className="ml-auto shrink-0"
-                />
+                {ai ? (
+                  <AIConvictionBadge
+                    score={ai.conviction}
+                    delta={ai.convictionDelta}
+                    size="xs"
+                    showLabel={false}
+                    className="ml-auto shrink-0"
+                  />
+                ) : null}
               </div>
               <ul className="mt-1 overflow-hidden">
                 {noteItems.map((item) => (
@@ -248,12 +286,14 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
       </div>
 
       <div className="mt-2.5 hidden flex-wrap items-center gap-1.5 lg:flex">
-        <AIConvictionBadge
-          score={position.ai.conviction}
-          delta={position.ai.convictionDelta}
-          size="sm"
-        />
-        <RecommendationChip recommendation={position.ai.recommendation} />
+        {ai ? (
+          <>
+            <AIConvictionBadge score={ai.conviction} delta={ai.convictionDelta} size="sm" />
+            <RecommendationChip recommendation={ai.recommendation} />
+          </>
+        ) : (
+          <AIUnavailableChip />
+        )}
       </div>
 
       {/* Two stacked stat rows on the left, contract analytics filling the
@@ -301,6 +341,7 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
               underlying={underlying.price}
               avgCost={position.avgCost}
               symbol={position.symbol}
+              mark={contractMark}
             />
           ) : null}
           <button
@@ -341,7 +382,16 @@ export function PositionTile({ valuation }: { valuation: PositionValuation }) {
         <button
           type="button"
           aria-label={`Close ${position.symbol} position`}
-          className="group grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96]"
+          // A live position the platform service never linked to a silent trade
+          // has no id bkt's exit route can take (§17). The control stays visible
+          // and inert rather than disappearing.
+          disabled={!isManualCloseAvailable(position)}
+          title={
+            isManualCloseAvailable(position)
+              ? undefined
+              : 'This position is not linked to a silent trade, so the execution service cannot close it.'
+          }
+          className="group grid h-10 w-10 place-items-center justify-self-start rounded-full border border-red-300/22 bg-red-400/[0.09] text-red-200/95 transition-transform active:translate-y-px active:scale-[0.96] disabled:opacity-40"
           onClick={(event) => {
             event.stopPropagation()
             setManualCloseOpen(true)
@@ -514,7 +564,8 @@ function MobilePositionField({
   /** The leading column has no left padding to bleed the header strip into. */
   first?: boolean
 }) {
-  const { position, marketValue, costBasis, totalReturn, totalReturnPct, dayPl, price } = valuation
+  const { position, marketValue, costBasis, totalReturn, totalReturnPct, price } = valuation
+  const day = dayPlOf(valuation)
   const quoteType = usePositionTilePreferences((state) => state.quoteType)
   const openingSign = optionOpeningSign(position)
   const displayedQuote = position.option
@@ -560,8 +611,8 @@ function MobilePositionField({
     },
     dayPl: {
       label: 'Day P/L',
-      value: formatSignedMoney(dayPl),
-      tone: dayPl >= 0 ? 'up' : 'down',
+      value: day.money,
+      tone: day.tone,
     },
     avgCost: {
       label: 'Cost',
@@ -695,7 +746,7 @@ export function positionExecutionCriteria(
 ): PositionExecutionCriterion[] {
   const criteria: PositionExecutionCriterion[] = plans.slice(0, 3).map((plan) => ({
     source: plan.source,
-    text: plan.originalPrompt?.trim() || plan.title.trim(),
+    text: plan.originalPrompt?.trim() || planTitle(plan),
   }))
 
   const riskFloor = formatMoney(Math.max(0.01, position.avgCost * 0.78))

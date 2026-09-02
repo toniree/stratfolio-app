@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { PortfolioOutlook } from '@/api/types'
 import { AIOutlookPanel, MobileAIInsights } from '@/components/portfolio/AIOutlookPanel'
 import { useAssistantChatStore } from '@/store/assistantChatStore'
+import { QueryWrapper } from '@/test/queryWrapper'
 
 const outlook: PortfolioOutlook = {
   stance: 'Constructive with discipline',
@@ -24,9 +25,12 @@ describe('MobileAIInsights', () => {
 
   it('opens from the floating AI launcher and minimizes back to it', async () => {
     render(
+      // AI Settings reads the platform's execution policy in live mode, so
+      // the panel that hosts it needs a query client.
       <MemoryRouter>
         <MobileAIInsights outlook={outlook} valuations={[]} />
       </MemoryRouter>,
+      { wrapper: QueryWrapper },
     )
 
     const launcher = screen.getByRole('button', { name: 'Open StratFolio AI Insights' })
@@ -55,6 +59,7 @@ describe('AIOutlookPanel desktop workspace', () => {
       <MemoryRouter>
         <AIOutlookPanel outlook={outlook} valuations={[]} />
       </MemoryRouter>,
+      { wrapper: QueryWrapper },
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Chats' }))

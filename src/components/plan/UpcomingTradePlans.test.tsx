@@ -76,9 +76,7 @@ describe('UpcomingTradePlans', () => {
       'href',
       '/app/plan?sort=trigger-soon',
     )
-    expect(
-      screen.getAllByText(/Trade plans which are active and close to automatic execution/),
-    ).toHaveLength(2)
+    expect(screen.getAllByText(/Nothing here enters a position on its own/)).toHaveLength(2)
     expect(container.querySelector('.plan-stopwatch-hand')).toBeInTheDocument()
     expect(container.querySelector('.plan-handoff-dots')).not.toBeInTheDocument()
     let rows = Array.from(container.querySelectorAll<HTMLElement>('[data-plan-source] > button'))

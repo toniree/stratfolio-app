@@ -281,7 +281,13 @@ function TicketBody(props: {
         <div className="flex items-center justify-between gap-2 border-t border-line pt-2.5">
           <dt className="text-[12.5px] text-ink-soft">Routed to</dt>
           <dd>
-            <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+            {/* Live positions belong to one paper portfolio and have no
+                brokerage to route to (HKP-PLT-6). */}
+            {position.brokerageId ? (
+              <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+            ) : (
+              <span className="text-[12.5px] font-semibold text-ink">Paper account</span>
+            )}
           </dd>
         </div>
       </dl>
@@ -332,8 +338,7 @@ export function TradeReviewModal({
           </span>
         </div>
         <p className="mt-1 text-[13px] text-ink-soft">
-          {position.company}
-          {position.contractDetail ? ` · ${position.contractDetail}` : ''}
+          {[position.company, position.contractDetail].filter(Boolean).join(' · ')}
         </p>
       </div>
 
@@ -345,14 +350,16 @@ export function TradeReviewModal({
         <Row label="Estimated commission" value="$0.00" />
       </dl>
 
-      <div className="liquid-inset flex items-start gap-2.5 rounded-[18px] border-brand-400/20 p-3.5">
-        <RecommendationChip recommendation={position.ai.recommendation} />
-        <p className="text-[12.5px] leading-relaxed text-ink-soft">
-          StratFolio AI currently rates {position.symbol} at{' '}
-          <span className="font-bold text-ink">{position.ai.conviction}/100</span> conviction.{' '}
-          {position.ai.recommendationNote}
-        </p>
-      </div>
+      {position.ai ? (
+        <div className="liquid-inset flex items-start gap-2.5 rounded-[18px] border-brand-400/20 p-3.5">
+          <RecommendationChip recommendation={position.ai.recommendation} />
+          <p className="text-[12.5px] leading-relaxed text-ink-soft">
+            StratFolio AI currently rates {position.symbol} at{' '}
+            <span className="font-bold text-ink">{position.ai.conviction}/100</span> conviction.{' '}
+            {position.ai.recommendationNote}
+          </p>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="rounded-xl bg-down-soft px-3 py-2.5 text-[12.5px] font-semibold text-down">
@@ -363,24 +370,43 @@ export function TradeReviewModal({
   )
 }
 
+/**
+ * The four outcomes a silent-execution attempt can end in.
+ *
+ * `NO_FILL` is a *successful* bkt response (201) that leaves no silent-trade
+ * row, and `platform_error` means bkt executed but could not tell plt — both
+ * are recoverable states, not errors and not success toasts (D3, §7.8). The
+ * ticket that actually submits these lands in Wave B (APP-112); the labels
+ * exist now so no code path can render a NO_FILL as "awaiting fill".
+ */
+const ORDER_STATUS_LABEL: Record<Order['status'], string> = {
+  SUBMITTED: 'Submitted · awaiting fill',
+  FILLED: 'Filled',
+  NO_FILL: 'No fill · nothing was opened',
+  REJECTED: 'Rejected by policy',
+}
+
 function SubmittedBody({ order, unit }: { order: Order | null; unit: string }) {
   if (!order) return null
   return (
     <div className="py-2 text-center">
-      <OrderRoutingAnimation brokerageId={order.brokerageId} />
+      {order.brokerageId ? <OrderRoutingAnimation brokerageId={order.brokerageId} /> : null}
 
       <h3 className="mt-4 text-[19px] font-extrabold tracking-[-0.02em] text-ink">
         Order submitted ✓
       </h3>
       <p className="mx-auto mt-1.5 max-w-[340px] text-[13px] leading-relaxed text-ink-soft">
         {order.side === 'BUY' ? 'Buy' : 'Sell'} {formatQty(order.quantity)} {unit} of{' '}
-        {order.symbol} at approximately {formatMoney(order.price)}.
+        {order.symbol}
+        {order.price === undefined ? '' : ` at approximately ${formatMoney(order.price)}`}.
       </p>
 
       <dl className="liquid-inset mt-4 space-y-2.5 rounded-[18px] p-3.5 text-left">
         <Row label="Order ID" value={order.id.toUpperCase()} />
-        <Row label="Status" value="Submitted · awaiting fill" />
-        <Row label="Estimated total" value={formatMoney(order.estimatedValue)} emphasis />
+        <Row label="Status" value={ORDER_STATUS_LABEL[order.status]} />
+        {order.estimatedValue === undefined ? null : (
+          <Row label="Estimated total" value={formatMoney(order.estimatedValue)} emphasis />
+        )}
       </dl>
 
       <p className="mt-3.5 text-[12px] leading-relaxed text-ink-muted">

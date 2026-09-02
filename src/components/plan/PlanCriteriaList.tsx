@@ -1,19 +1,24 @@
 import { useState } from 'react'
-import { CheckCircle2, Circle, Pencil } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import type { PlannerIdea } from '@/api/newsTypes'
 import { planCriteria } from '@/lib/planIntent'
 import { useUpdatePlannerIdea } from '@/hooks/queries'
 import { Button } from '@/components/ui/Button'
+import {
+  CRITERION_UNKNOWN_NOTE,
+  CriterionIcon,
+  criterionTextClass,
+} from '@/components/plan/CriterionIcon'
 
 /**
- * A plan's execution criteria as a live checklist: green check when the
- * condition is currently met, hollow circle while it is still being watched.
+ * A plan's conditions, each with its evaluation state.
  *
  * Editing swaps the list for a one-condition-per-line textarea and persists
  * through the planner update API. A criterion whose wording survives the edit
- * keeps its met state; new lines start unmet — the engine has not evaluated
- * them yet.
+ * keeps its state; new lines start `unknown` — not `unmet`. Nothing evaluates
+ * an entry condition anywhere in the backend (HKP-XSV-1), so the app must not
+ * imply it has checked and found the condition false.
  */
 export function PlanCriteriaList({
   plan,
@@ -43,7 +48,7 @@ export function PlanCriteriaList({
       input: {
         criteria: lines.map((text) => ({
           text,
-          met: criteria.find((c) => c.text === text)?.met ?? false,
+          state: criteria.find((c) => c.text === text)?.state ?? 'unknown',
         })),
       },
     })
@@ -82,7 +87,7 @@ export function PlanCriteriaList({
             className="liquid-control h-auto w-full resize-none rounded-[14px] px-3 py-2.5 text-[11px] leading-relaxed text-ink outline-none"
           />
           <p className="text-[9.5px] leading-relaxed text-white/62">
-            One criterion per line. New conditions start unmet until the engine evaluates them.
+            One criterion per line. {CRITERION_UNKNOWN_NOTE}
           </p>
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -107,17 +112,8 @@ export function PlanCriteriaList({
         <ul className="mt-1.5 space-y-1.5">
           {criteria.map((criterion) => (
             <li key={criterion.text} className="flex items-start gap-1.5">
-              {criterion.met ? (
-                <CheckCircle2 size={12} strokeWidth={2.4} className="mt-px shrink-0 text-up" />
-              ) : (
-                <Circle size={12} strokeWidth={2} className="mt-px shrink-0 text-ink-muted/70" />
-              )}
-              <span
-                className={cn(
-                  'min-w-0 text-[10px] leading-snug',
-                  criterion.met ? 'text-white/90' : 'text-white/65',
-                )}
-              >
+              <CriterionIcon state={criterion.state} />
+              <span className={cn('min-w-0 text-[10px] leading-snug', criterionTextClass(criterion.state))}>
                 {criterion.text}
               </span>
             </li>

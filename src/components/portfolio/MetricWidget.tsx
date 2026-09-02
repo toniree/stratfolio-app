@@ -4,6 +4,7 @@ import { AlertTriangle, Info, PieChart, Wallet, Target, TrendingUp } from 'lucid
 import { cn } from '@/lib/cn'
 import { formatMoney, formatSignedMoney, formatSignedPercent } from '@/lib/format'
 import type { PortfolioTotals } from '@/lib/portfolioMath'
+import { dayPlTotal } from '@/lib/dayChange'
 import type { PortfolioMeta } from '@/api/types'
 import { Sparkline } from '@/components/charts/Sparkline'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -11,7 +12,9 @@ import { Skeleton } from '@/components/ui/Skeleton'
 const CONCENTRATION_GUARDRAIL = 20
 const ALLOCATION_COLORS = ['#5ba6ff', '#8b5cf6', '#34d399', '#f5c26b', '#f87171', '#22d3ee', '#f472b6', '#a3e635']
 
-type Allocation = { symbol: string; company: string; percent: number; color: string }
+// `company` is optional throughout: there is no live-safe symbol→name source
+// (HKP-MND-4), so live rows carry a ticker and nothing else.
+type Allocation = { symbol: string; company?: string; percent: number; color: string }
 
 /**
  * Primary portfolio metrics on desktop. Mobile receives all five values from
@@ -58,9 +61,11 @@ export function MetricWidgets({
       <Widget
         icon={Wallet}
         label="Day P/L"
-        value={formatSignedMoney(totals.dayPl)}
-        secondary={formatSignedPercent(totals.dayPlPct)}
-        tone={totals.dayPl >= 0 ? 'up' : 'down'}
+        // Withheld when any holding has no prior mark: the sum would be
+        // partial, and a partial total reads as a complete one.
+        value={dayPlTotal(totals).money}
+        secondary={dayPlTotal(totals).percent}
+        tone={dayPlTotal(totals).tone}
         spark={trend}
       />
       <Widget
@@ -114,9 +119,11 @@ function CompactConcentrationWidget({
           </div>
           <span
             className="mt-1 block truncate text-[9.5px] font-bold tracking-[0.04em] text-ink-muted uppercase"
-            title={selected?.company}
+            title={selected?.company ?? selected?.symbol}
           >
-            {selected ? `${selected.symbol} · ${selected.company}` : 'No holdings'}
+            {selected
+              ? `${selected.symbol}${selected.company ? ` · ${selected.company}` : ''}`
+              : 'No holdings'}
           </span>
         </div>
         <span className="liquid-inset grid shrink-0 place-items-center rounded-full p-1">
@@ -166,13 +173,13 @@ function AllocationRing({
             className="cursor-pointer transition-[stroke-width,opacity] duration-150"
             opacity={activeIndex === null || activeIndex === index ? 1 : 0.38}
             tabIndex={0}
-            aria-label={`${allocation.company} ${allocation.percent.toFixed(1)}%`}
+            aria-label={`${allocation.company ?? allocation.symbol} ${allocation.percent.toFixed(1)}%`}
             onMouseEnter={() => onActive(index)}
             onMouseLeave={() => onActive(null)}
             onFocus={() => onActive(index)}
             onBlur={() => onActive(null)}
           >
-            <title>{allocation.company}: {allocation.percent.toFixed(1)}%</title>
+            <title>{allocation.company ?? allocation.symbol}: {allocation.percent.toFixed(1)}%</title>
           </circle>
         )
       })}

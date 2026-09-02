@@ -4,7 +4,9 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    // "node" is here for the test-only guards that read the source tree
+    // (the D4 import-boundary check); app code stays browser-only.
+    "types": ["vite/client", "node"],
     "paths": {
       "@/*": ["./src/*"]
     },

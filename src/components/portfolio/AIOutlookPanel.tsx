@@ -33,6 +33,7 @@ import { useAssistantChatStore, type AssistantChatMessage } from '@/store/assist
 import { useRepromptStore, type RepromptRecord } from '@/store/repromptStore'
 import { daysToExpiry, moneynessLabel } from '@/lib/optionMath'
 import { RecommendationChip } from '@/components/intelligence/TradeRecommendation'
+import { AIUnavailable, AIUnavailableChip } from '@/components/intelligence/AIUnavailable'
 import { LogoMark } from '@/components/brand/Logo'
 import { AISettingsModal } from '@/components/assistant/AISettingsModal'
 
@@ -118,7 +119,13 @@ export function AIOutlookPanel({
     const options = valuations.filter((v) => v.position.option)
     const equities = valuations
       .filter((v) => !v.position.option)
-      .sort((a, b) => Math.abs(b.position.ai.convictionDelta) - Math.abs(a.position.ai.convictionDelta))
+      // Unassessed holdings sort last rather than as a zero-magnitude move:
+      // "no conviction change recorded" is not "conviction did not change".
+      .sort(
+        (a, b) =>
+          Math.abs(b.position.ai?.convictionDelta ?? -1) -
+          Math.abs(a.position.ai?.convictionDelta ?? -1),
+      )
     return [...options, ...equities.slice(0, 3)]
   }, [valuations])
 
@@ -548,7 +555,9 @@ function MarketOutlookCard({
 type TimelineItem = {
   id: string
   title: string
-  detail: string
+  /** Absent when the source row carried nothing to describe (plt activity
+   *  rows have no free-text detail; a payload-less row has none). */
+  detail?: string
   at: string
   kind: 'trade' | 'plan' | 'reprompt'
 }
@@ -600,7 +609,11 @@ function ActionsPanel({
             </span>
             <div className="min-w-0">
               <div className="text-[11.5px] leading-snug font-bold text-ink">{item.title}</div>
-              <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-ink-muted">{item.detail}</p>
+              {item.detail ? (
+                <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-ink-muted">
+                  {item.detail}
+                </p>
+              ) : null}
               <time className="mt-1 block text-[9px] text-ink-muted/65">{dateTime(item.at)}</time>
             </div>
           </div>
@@ -873,16 +886,24 @@ function PositionCommentaryCard({ valuation }: { valuation: PositionValuation })
             </span>
           </div>
           <p className="truncate text-[11px] text-ink-muted">
-            {contract ? `$${contract.strike} ${contract.right === 'CALL' ? 'Call' : 'Put'} · ${contract.expiryLabel}` : position.company}
+            {contract
+              ? `$${contract.strike} ${contract.right === 'CALL' ? 'Call' : 'Put'} · ${contract.expiryLabel}`
+              : (position.company ?? position.symbol)}
           </p>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <RecommendationChip recommendation={ai.recommendation} />
-        <span className="num rounded-md bg-brand-100 px-1.5 py-0.5 text-[10.5px] font-bold text-brand-300">
-          {ai.conviction}/100
-        </span>
+        {ai ? (
+          <>
+            <RecommendationChip recommendation={ai.recommendation} />
+            <span className="num rounded-md bg-brand-100 px-1.5 py-0.5 text-[10.5px] font-bold text-brand-300">
+              {ai.conviction}/100
+            </span>
+          </>
+        ) : (
+          <AIUnavailableChip />
+        )}
         {contract ? (
           <>
             <span className="num rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-soft">
@@ -895,18 +916,24 @@ function PositionCommentaryCard({ valuation }: { valuation: PositionValuation })
         ) : null}
       </div>
 
-      <p className="mt-3 text-[12.5px] leading-relaxed font-semibold text-ink">
-        {ai.recommendationNote}
-      </p>
+      {ai ? (
+        <>
+          <p className="mt-3 text-[12.5px] leading-relaxed font-semibold text-ink">
+            {ai.recommendationNote}
+          </p>
 
-      <ul className="mt-2.5 space-y-2">
-        {ai.thesis.slice(0, 2).map((bullet, i) => (
-          <li key={i} className="flex gap-2 text-[11.5px] leading-relaxed text-ink-muted">
-            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-500" aria-hidden />
-            <span>{bullet}</span>
-          </li>
-        ))}
-      </ul>
+          <ul className="mt-2.5 space-y-2">
+            {ai.thesis.slice(0, 2).map((bullet, i) => (
+              <li key={i} className="flex gap-2 text-[11.5px] leading-relaxed text-ink-muted">
+                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-500" aria-hidden />
+                <span>{bullet}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <AIUnavailable className="mt-3" />
+      )}
 
       {contract?.earningsNote ? (
         <p className="mt-3 rounded-xl border border-line bg-white/[0.04] px-2.5 py-2 text-[11px] leading-snug text-ink-soft">

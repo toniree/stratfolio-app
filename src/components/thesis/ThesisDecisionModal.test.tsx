@@ -11,11 +11,12 @@ const idea = {
 } as Idea
 
 describe('ThesisDecisionModal', () => {
-  it('passes an optional plan refinement through the add action', () => {
+  it('passes an optional note through the accept action', () => {
     const onConfirm = vi.fn()
     render(
       <ThesisDecisionModal
-        idea={idea}
+        symbol={idea.symbol}
+        label={idea.contractDetail ?? idea.company}
         mode="add"
         open
         onOpenChange={vi.fn()}
@@ -23,11 +24,13 @@ describe('ThesisDecisionModal', () => {
       />,
     )
 
-    expect(screen.getByText(/Prompt is optional/i)).toBeInTheDocument()
-    fireEvent.change(screen.getByPlaceholderText(/max capital, targets and bands/i), {
+    // Accepting records a decision. It does not create a plan, and the copy
+    // must not promise one: the client-side derivation is gone (§3.3).
+    expect(screen.getByText(/does not place a trade or create a plan/i)).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText(/why this thesis fits/i), {
       target: { value: 'Cap the position at one contract.' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Add trade plan' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept thesis' }))
 
     expect(onConfirm).toHaveBeenCalledWith('Cap the position at one contract.')
   })
@@ -35,7 +38,8 @@ describe('ThesisDecisionModal', () => {
   it('explains that rejection feedback helps the model learn', () => {
     render(
       <ThesisDecisionModal
-        idea={idea}
+        symbol={idea.symbol}
+        label={idea.contractDetail ?? idea.company}
         mode="reject"
         open
         onOpenChange={vi.fn()}

@@ -4,7 +4,14 @@ import { Newspaper, Sparkles, Trash2 } from 'lucide-react'
 import { usePlannerIdeas, useDeletePlannerIdea } from '@/hooks/queries'
 import { usePrice } from '@/store/priceStore'
 import { useAssistantContext } from '@/hooks/useAssistantContext'
-import { formatMoney, formatPercent, formatSignedPercent, relativeTime } from '@/lib/format'
+import {
+  MISSING,
+  formatMoneyOr,
+  formatPercent,
+  formatRange,
+  formatSignedPercent,
+  relativeTime,
+} from '@/lib/format'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PlanStopwatchIcon } from '@/components/plan/PlanStopwatchIcon'
 import { Sparkline } from '@/components/charts/Sparkline'
@@ -65,11 +72,29 @@ export function PlannerIdeaDetailsPage() {
     )
   }
 
+  // Every band below is optional since APP-113: plt records an entry band and
+  // fractional exits, and has no target band or absolute stop at all (§3.3).
+  // A missing band produces no verdict rather than a verdict against zero.
   const price = snap?.price ?? idea.entryHigh
   const up = (snap?.dayChangePct ?? 0) >= 0
-  const inEntryBand = price >= idea.entryLow && price <= idea.entryHigh
-  const riskPerUnit = Math.abs(idea.entryHigh - idea.stop)
-  const rewardPerUnit = Math.abs((idea.targetLow + idea.targetHigh) / 2 - idea.entryHigh)
+  const inEntryBand =
+    price !== undefined &&
+    idea.entryLow !== undefined &&
+    idea.entryHigh !== undefined &&
+    price >= idea.entryLow &&
+    price <= idea.entryHigh
+  const targetMid =
+    idea.targetLow !== undefined && idea.targetHigh !== undefined
+      ? (idea.targetLow + idea.targetHigh) / 2
+      : undefined
+  const riskPerUnit =
+    idea.entryHigh !== undefined && idea.stop !== undefined
+      ? Math.abs(idea.entryHigh - idea.stop)
+      : 0
+  const rewardPerUnit =
+    targetMid !== undefined && idea.entryHigh !== undefined
+      ? Math.abs(targetMid - idea.entryHigh)
+      : 0
   const ratio = riskPerUnit > 0 ? rewardPerUnit / riskPerUnit : 0
 
   const handleDelete = async () => {
@@ -155,10 +180,15 @@ export function PlannerIdeaDetailsPage() {
               Live price
             </div>
             <div className="num mt-1 text-[28px] leading-none font-extrabold tracking-[-0.03em] text-ink">
-              {formatMoney(price)}
+              {formatMoneyOr(price)}
             </div>
-            <div className={`num mt-1.5 text-[13px] font-bold ${up ? 'text-up' : 'text-down'}`}>
-              {formatSignedPercent(snap?.dayChangePct ?? 0)}{' '}
+            <div
+              className={`num mt-1.5 text-[13px] font-bold ${
+                snap === undefined ? 'text-ink-muted' : up ? 'text-up' : 'text-down'
+              }`}
+            >
+              {/* No quote for this symbol means no day change — not a flat one. */}
+              {snap === undefined ? '—' : formatSignedPercent(snap.dayChangePct)}{' '}
               <span className="font-medium text-ink-muted">today</span>
             </div>
           </div>
@@ -174,30 +204,39 @@ export function PlannerIdeaDetailsPage() {
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4 sm:grid-cols-4">
           <DetailStat
             label="Entry range"
-            value={`${formatMoney(idea.entryLow)} – ${formatMoney(idea.entryHigh)}`}
+            value={formatRange(idea.entryLow, idea.entryHigh)}
           />
           <DetailStat
             label="Target range"
-            value={`${formatMoney(idea.targetLow)} – ${formatMoney(idea.targetHigh)}`}
+            value={formatRange(idea.targetLow, idea.targetHigh)}
             tone="up"
           />
-          <DetailStat label="Stop" value={formatMoney(idea.stop)} tone="down" />
+          <DetailStat label="Stop" value={formatMoneyOr(idea.stop)} tone="down" />
           <DetailStat
             label="Expected upside"
-            value={formatPercent(idea.expectedUpsidePct, 1)}
+            value={
+              idea.expectedUpsidePct === undefined
+                ? MISSING
+                : formatPercent(idea.expectedUpsidePct, 1)
+            }
             hint={idea.horizon}
             tone="up"
           />
         </dl>
       </section>
 
-      <RiskRewardMeter
-        currentPrice={price}
-        upsideTarget={(idea.targetLow + idea.targetHigh) / 2}
-        downsideRisk={idea.stop}
-        riskRewardRatio={idea.ai?.riskRewardRatio ?? ratio}
-        horizon={idea.horizon}
-      />
+      {/* The meter needs a price, a target and a stop. A live plan has none of
+          the last two (§3.3), so it simply does not render — an "upside" of
+          zero against a stop of zero is a claim the plan never made. */}
+      {price !== undefined && targetMid !== undefined && idea.stop !== undefined ? (
+        <RiskRewardMeter
+          currentPrice={price}
+          upsideTarget={targetMid}
+          downsideRisk={idea.stop}
+          riskRewardRatio={idea.ai?.riskRewardRatio ?? ratio}
+          horizon={idea.horizon ?? MISSING}
+        />
+      ) : null}
 
       {idea.ai ? (
         <section className="card relative overflow-hidden rounded-[24px] border-brand-400/20">

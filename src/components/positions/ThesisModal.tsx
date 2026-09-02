@@ -7,6 +7,7 @@ import { RiskRewardMeter } from '@/components/intelligence/RiskRewardMeter'
 import { BrokerageBadge } from '@/components/shared/BrokerageBadge'
 import { formatMoney, formatRange, relativeTime } from '@/lib/format'
 import type { PositionValuation } from '@/lib/portfolioMath'
+import { AIUnavailable } from '@/components/intelligence/AIUnavailable'
 
 export function ThesisModal({
   valuation,
@@ -27,7 +28,7 @@ export function ThesisModal({
       open={open}
       onOpenChange={onOpenChange}
       title={`${position.symbol} — AI thesis`}
-      description={`${position.company}${position.contractDetail ? ` · ${position.contractDetail}` : ''}`}
+      description={[position.company, position.contractDetail].filter(Boolean).join(' · ')}
       footer={
         <div className="flex gap-2.5">
           <Button variant="secondary" className="flex-1" onClick={() => onOpenChange(false)}>
@@ -41,10 +42,21 @@ export function ThesisModal({
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <AIConvictionBadge score={ai.conviction} delta={ai.convictionDelta} size="lg" />
-          <RecommendationChip recommendation={ai.recommendation} />
-          <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+          {ai ? (
+            <>
+              <AIConvictionBadge score={ai.conviction} delta={ai.convictionDelta} size="lg" />
+              <RecommendationChip recommendation={ai.recommendation} />
+            </>
+          ) : null}
+          {/* Live positions live in one paper portfolio and have no brokerage
+              to attribute (HKP-PLT-6); only the demo book does. */}
+          {position.brokerageId ? (
+            <BrokerageBadge id={position.brokerageId} showName showMask size="sm" />
+          ) : null}
         </div>
+
+        {ai ? (
+          <>
 
         <div className="liquid-inset relative overflow-hidden rounded-[20px] border-brand-400/20 p-4">
           <span className="ai-gradient absolute inset-y-4 left-0 w-[3px] rounded-r-full" aria-hidden />
@@ -84,6 +96,10 @@ export function ThesisModal({
           </div>
           <p className="mt-1 text-[13.5px] leading-relaxed text-ink-soft">{ai.recommendationNote}</p>
         </div>
+          </>
+        ) : (
+          <AIUnavailable detail="No model thesis was recorded for this position. plt stores a decision-episode id, not the episode's content, and service-ai exposes no episode list yet (HKP-AI-1)." />
+        )}
       </div>
     </Modal>
   )
